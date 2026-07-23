@@ -1,6 +1,6 @@
 # Phase 02: Vault Verification Core
 
-**Status:** PLANNED
+**Status:** APPROVED (user sign-off Session 5, 2026-07-23) — ready for implementation
 **Goal:** Verify a markdown draft with wikilink citations against its trusted Obsidian vault — the best-case scenario for academic claim verification. Produce a gap report that tells the author what is supported, what is miscited, and where the vault is thin.
 
 ---
@@ -39,6 +39,8 @@ The best case: the author's draft is markdown, its citations are wikilinks to va
 - `argument_pyramid: [paper-name]` frontmatter marks notes belonging to a specific paper — use it to pre-filter the vault per run.
 - CLAIM notes carry `claim_strength` and `evidence_quality` (1–5) — read these where a draft claim matches a vault CLAIM note; do not invent importance scores in this phase.
 - The draft: `vault-main/v-research/MS-DRAFT-working-paper-ukraine-vote-analysis-v2-full-text.md` (~7,000 words), citations as `[[SOURCE-…|Author (Year)]]` wikilinks.
+
+**Standard dev test file (user directive, Session 5):** use `workspace/inbox/ukraine-intro-test.txt` (first two intro paragraphs, ~250 words) for development testing — cents per run vs $10 for the full paper. Its behavior is characterized: 15 claims, 10 supported / 5 refuted, including one confirmed real error (the "98 votes" that should be 93 — Feb 2025 European-backed resolution), one decomposition artifact ("first resolution adopted by the Assembly"), and three dataset-dependent claims web search can't verify (the Phase 02 motivating cases). It also contains a plain author-year cite "(Zeng 2026)" — a ready-made `unparsed-citation` fixture for TG 02.2.4. Reserve full-paper runs for the TG 02.7 milestone.
 
 ### Scale and cost expectations
 
@@ -189,5 +191,5 @@ Serialized vault (frontmatter + key sections) ≈ 100–150K tokens for 421 note
 - PDF-only drafts / plain-text author-year citation parsing and binding
 - Source fetching for cited-but-absent papers
 - Vault-less heavy runs (corpus/web-only academic verification)
-- Vault QA / argument-chain completeness checking (the original Phase 02 concept, deferred when the vault was declared trusted)
+- Vault QA / argument-chain completeness checking (the original Phase 02 concept, deferred when the vault was declared trusted). Session 5 evidence for this phase: the "98 vs 93" error entered via a QUOTE note's `## Context` section (paraphrase) while the verbatim quote text stayed clean — so vault QA should (a) programmatically verify verbatim quote text against fetched source text, and (b) treat Context/paraphrase prose as the error-prone layer (proper home: PARA notes).
 - Semi-automated vault enrichment from gap report signals

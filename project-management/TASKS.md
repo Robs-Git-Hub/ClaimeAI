@@ -15,7 +15,7 @@
 
 ---
 
-## Phase 01: Foundation & Core Pipeline — IN PROGRESS
+## Phase 01: Foundation & Core Pipeline — COMPLETE (Session 5)
 
 ### TG 01.1: PM Structure — COMPLETE
 
@@ -76,13 +76,13 @@ TDD: fixture PDF in `tests/fixtures/`; extraction and chunking are unit-testable
 
 Session 2 note: docling first-run model download (~505 MB) hung once on a wedged HF CDN connection; killed and re-ran with HF_HUB_OFFLINE=1 against the populated cache (~40s). Models now cached; future runs need no download.
 
-### TG 01.5: Claimify Skill
+### TG 01.5: Claimify Skill — COMPLETE
 
 - [x] 01.5.1 Skill created at `.claude/skills/claimify/SKILL.md` (directory+SKILL.md is the current Claude Code convention, supersedes the planned flat claimify.md path) — covers input resolution, .env preflight, server start, run command, cost warning, results presentation, failure modes
 - [x] 01.5.2 Output format defined: `workspace/output/<stem>/results.json` + `report.md` (implemented in TG 01.4, documented in skill). `run_from_pdf.py` extended to accept .md/.txt/.markdown input (8 new offline tests; 31 total in test_ingest.py)
-- [ ] 01.5.3 Test end-to-end: `/claimify workspace/inbox/paper.pdf` → NOT YET TESTED. Session 4 ran `run_from_pdf.py` directly (which passed); the `/claimify` skill wrapper was not exercised.
+- [x] 01.5.3 Test end-to-end — PASSED (Session 5): `/claimify workspace/inbox/ukraine-intro-test.txt` (2 intro paragraphs of the ukraine paper). Skill wrapper exercised fully: preflight, server start, run, results presentation, and the failure path (first attempt hit OpenAI 429 insufficient_quota — error recorded cleanly in results.json/report.md, not silently dropped). Re-run via `LLM_PROVIDER=openrouter` env override: 15 claims, 10 supported, 5 refuted. Note: OpenAI account is out of API credit as of Session 5.
 
-### TG 01.6: Quality & Wrap — IN PROGRESS
+### TG 01.6: Quality & Wrap — COMPLETE
 
 - [x] 01.6.1a OpenAI provider live test passed (Apollo 11 paragraph, 14 claims, 12/2 supported/refuted)
 - [x] 01.6.1b OpenRouter provider live test — passed (Session 3): Apollo 11 input → 2 claims, 2 supported. All 3 tiers exercised (Gemma 4 / Haiku 4.5 / Sonnet 5 with reasoning_effort=medium) via Exa.
@@ -115,7 +115,7 @@ Acceptance criteria for TG 01.6:
 
 ---
 
-## Phase 02: Vault Verification Core — PLANNED
+## Phase 02: Vault Verification Core — APPROVED (user sign-off Session 5)
 
 Plan: `phase-plans/phase-02-vault-verification-core.md` (supersedes the old "Argument Chain Verification" Phase 02 — chain-completeness checking moved to the edge-case backlog; design decisions from Session 4 recorded in the plan's Design pillars).
 
