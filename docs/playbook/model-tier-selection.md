@@ -2,7 +2,7 @@
 
 How we chose which LLM models to assign to each cost/quality tier, and why.
 
-Last updated: 2026-07-22 (Session 2)
+Last updated: 2026-07-23 (Session 3)
 
 ## Design principle
 
@@ -49,7 +49,7 @@ Tiers are matched **across providers by class and cost band**, not by name. A "l
 | Provider | Model | Price (in/out per 1M) | Key characteristics |
 |----------|-------|----------------------|---------------------|
 | OpenAI | `gpt-4.1` | $2 / $8 | **OpenAI's smartest non-reasoning model.** 1M context. Replaced GPT-4o as the recommended API model. Best instruction-following and coding in OpenAI's lineup (non-o-series). Chosen for evidence evaluation because it balances intelligence, speed, and cost. |
-| OpenRouter | `anthropic/claude-sonnet-5` | $2 / $10 | **Anthropic's most capable Sonnet — a hybrid-reasoning model.** 1M context. Frontier performance across coding, agents, and professional work. Supports adaptive reasoning with selectable effort levels (low/medium/high/max/x-high) — the reasoning level should be set when constructing the client for evidence evaluation. Price-comparable to gpt-4.1 ($2/$8 vs $2/$10). Anthropic's recommended model for production use. |
+| OpenRouter | `anthropic/claude-sonnet-5` | $2 / $10 | **Anthropic's most capable Sonnet — a hybrid-reasoning model.** 1M context. Frontier performance across coding, agents, and professional work. Reasoning effort is set to `"medium"` via `REASONING_CONFIG` in `utils/models.py` — balances verdict quality against cost. Uses `ChatOpenAI(reasoning_effort="medium")` built-in parameter. Price-comparable to gpt-4.1 ($2/$8 vs $2/$10). Anthropic's recommended model for production use. |
 
 ## Why not Opus?
 
@@ -90,7 +90,8 @@ These are rough estimates — actual costs depend on input length, evidence volu
 To add a third provider (e.g., a local Ollama instance):
 
 1. Add the provider key to `MODEL_REGISTRY` in `utils/models.py` with models for all three tiers.
-2. Add provider-specific client construction in `utils/models.py` (following the `_get_openrouter_llm` pattern).
-3. Add the provider value to the `llm_provider` validator in `utils/settings.py`.
-4. Add any required API key field to settings.
-5. Update this playbook with the model choices and rationale.
+2. If any model supports hybrid reasoning, add a corresponding entry to `REASONING_CONFIG`.
+3. Add provider-specific client construction in `utils/models.py` (following the `_get_openrouter_llm` pattern).
+4. Add the provider value to the `llm_provider` validator in `utils/settings.py`.
+5. Add any required API key field to settings.
+6. Update this playbook with the model choices and rationale.

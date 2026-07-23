@@ -35,6 +35,10 @@ Notes:
 - **The `high` tier must never be downgraded.** `gpt-4.1` is OpenAI's smartest
   non-reasoning model; `claude-sonnet-5` is Anthropic's frontier hybrid-reasoning
   model. Evidence evaluation produces the final verdict and is the quality gate.
+- **Reasoning effort:** The OpenRouter `high` tier (Sonnet 5) uses
+  `reasoning_effort="medium"` via `REASONING_CONFIG` in `utils/models.py`. This
+  is set automatically when `get_llm(tier="high")` is called with the OpenRouter
+  provider — nodes don't need to know about it.
 - OpenRouter model IDs verified against [openrouter.ai](https://openrouter.ai)
   on 2026-07-22. Re-confirm before the first live paid run.
 - The 3-completion / 2-of-3 voting quality gate (selection and disambiguation)

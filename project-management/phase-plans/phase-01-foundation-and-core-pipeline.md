@@ -43,15 +43,15 @@ Remove the Next.js web app (`apps/web/`), Chrome extension (`apps/extension/`), 
 
 Add OpenRouter as a second LLM provider alongside OpenAI. OpenRouter uses the OpenAI-compatible API format, so `langchain-openai` works with a different base URL and API key. The selection is controlled by a `LLM_PROVIDER` env var.
 
-Model mapping (OpenAI → OpenRouter/Claude equivalents):
+Model mapping (OpenAI → OpenRouter equivalents, post-rebalancing):
 
-| Current (OpenAI)  | Role                      | OpenRouter equivalent    |
-| ------------------ | ------------------------- | ------------------------ |
-| gpt-4o-mini        | Claim extraction (all)    | claude-haiku-4-5         |
-| gpt-4.1-mini       | Query gen, search decision| claude-sonnet-4           |
-| gpt-4.1            | Evidence evaluation       | claude-opus-4             |
+| Tier | OpenAI          | OpenRouter                        |
+| ---- | --------------- | --------------------------------- |
+| low  | gpt-4o-mini     | google/gemma-4-26b-a4b-it         |
+| mid  | gpt-4.1-mini    | anthropic/claude-haiku-4.5        |
+| high | gpt-4.1         | anthropic/claude-sonnet-5         |
 
-**Important:** The voting mechanism (3 completions, 2/3 consensus) and evidence evaluation must use capable models. Do not map the evidence evaluation call to anything below Opus-tier.
+**Important:** The voting mechanism (3 completions, 2/3 consensus) and evidence evaluation must use capable models. Do not map the evidence evaluation call below the high tier (gpt-4.1 / Sonnet 5). Sonnet 5 reasoning effort is set to "medium" via `REASONING_CONFIG`.
 
 **Prep findings (Session 2):**
 - The single integration point is `utils/models.py:get_llm()` — it hardwires `settings.openai_api_key`. The only explicit model override in the codebase is `claim_verifier/nodes/evaluate_evidence.py:92` (`openai:gpt-4.1`).
