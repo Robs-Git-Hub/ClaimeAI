@@ -89,7 +89,7 @@ async def evaluate_evidence_node(state: ClaimVerifierState) -> dict:
         ),
     ]
 
-    llm = get_llm(role="evidence_evaluation")
+    llm = get_llm(tier="high")
 
     response = await call_llm_with_structured_output(
         llm=llm,

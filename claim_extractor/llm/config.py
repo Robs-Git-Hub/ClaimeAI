@@ -2,8 +2,8 @@
 
 Central settings for language model behavior.
 
-Model selection lives in the per-role registry in ``utils/models.py``
-(MODEL_REGISTRY); extractor nodes request ``role="extraction"``.
+Model selection lives in the per-tier registry in ``utils/models.py``
+(MODEL_REGISTRY); extractor nodes request ``tier="low"``.
 """
 
 # Temperature settings

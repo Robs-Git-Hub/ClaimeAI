@@ -9,7 +9,10 @@ Provider selection is driven by ``LLM_PROVIDER`` (see ``utils/settings.py``):
 - ``openrouter`` — models are created via ``ChatOpenAI`` against OpenRouter's
   OpenAI-compatible endpoint using ``OPENROUTER_API_KEY``.
 
-Each pipeline role maps to a model tier per provider via ``MODEL_REGISTRY``.
+Each pipeline node maps to one of three cost/quality tiers ("low", "mid",
+"high") via ``MODEL_REGISTRY``. Swapping ``LLM_PROVIDER`` in ``.env`` is the
+only thing that should ever need to change to move the whole pipeline between
+providers — nodes only ever ask for a tier, never a concrete model name.
 """
 
 from langchain.chat_models import init_chat_model
@@ -20,56 +23,53 @@ from utils.settings import settings
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
-# Per-role model registry (single source of truth for model selection).
+# Per-tier model registry (single source of truth for model selection).
 #
-# Roles:
-#   extraction          — claim extractor nodes (selection, disambiguation,
-#                         decomposition, validation); high-volume, cheap tier.
-#   query_generation    — search query generation for verification.
-#   search_decision     — decide whether another search iteration is needed.
-#   evidence_evaluation — final verdict on a claim. QUALITY GATE: this role
-#                         must NEVER map below Opus-tier (OpenRouter) /
-#                         GPT-4.1-tier (OpenAI). Do not downgrade this call.
-#   default             — fallback when no role is given.
+# Tiers:
+#   low  — high-volume, cheap calls: claim extractor nodes (selection,
+#          disambiguation, decomposition, validation). Also the default tier
+#          when none is given.
+#   mid  — mid-cost reasoning calls: search query generation and the
+#          search-continue/stop decision.
+#   high — final verdict on a claim (evidence evaluation).
+#          QUALITY GATE: evidence evaluation — never map below Opus/GPT-4.1
+#          tier. This is the primary quality mechanism of the verifier; do
+#          not downgrade this call.
 #
 # OpenRouter model IDs verified against openrouter.ai on 2026-07-22
 # (current tiers: claude-haiku-4.5 / claude-sonnet-5 / claude-opus-4.8).
 # Re-confirm IDs at live-test time (task 01.3.5) before first paid run.
 MODEL_REGISTRY: dict[str, dict[str, str]] = {
     "openai": {
-        "default": "openai:gpt-4o-mini",
-        "extraction": "openai:gpt-4o-mini",
-        "query_generation": "openai:gpt-4.1-mini",
-        "search_decision": "openai:gpt-4.1-mini",
-        "evidence_evaluation": "openai:gpt-4.1",
+        "low": "openai:gpt-4o-mini",
+        "mid": "openai:gpt-4.1-mini",
+        "high": "openai:gpt-4.1",
     },
     "openrouter": {
-        "default": "anthropic/claude-haiku-4.5",
-        "extraction": "anthropic/claude-haiku-4.5",
-        "query_generation": "anthropic/claude-sonnet-5",
-        "search_decision": "anthropic/claude-sonnet-5",
+        "low": "anthropic/claude-haiku-4.5",
+        "mid": "anthropic/claude-sonnet-5",
         # Never below Opus-tier — evidence evaluation is the primary
         # quality mechanism of the verifier.
-        "evidence_evaluation": "anthropic/claude-opus-4.8",
+        "high": "anthropic/claude-opus-4.8",
     },
 }
 
 
-def resolve_model(role: str | None = None, provider: str | None = None) -> str:
-    """Resolve a pipeline role to a provider-specific model name.
+def resolve_model(tier: str | None = None, provider: str | None = None) -> str:
+    """Resolve a pipeline tier to a provider-specific model name.
 
     Args:
-        role: Pipeline role (see MODEL_REGISTRY). None resolves to "default".
+        tier: Cost/quality tier (see MODEL_REGISTRY). None resolves to "low".
         provider: LLM provider; defaults to ``settings.llm_provider``.
 
     Returns:
-        The model identifier for the given role and provider.
+        The model identifier for the given tier and provider.
 
     Raises:
-        ValueError: If the provider or role is unknown.
+        ValueError: If the provider or tier is unknown.
     """
     provider = provider or settings.llm_provider
-    role = role or "default"
+    tier = tier or "low"
 
     try:
         provider_models = MODEL_REGISTRY[provider]
@@ -80,10 +80,10 @@ def resolve_model(role: str | None = None, provider: str | None = None) -> str:
         ) from None
 
     try:
-        return provider_models[role]
+        return provider_models[tier]
     except KeyError:
         raise ValueError(
-            f"Unknown LLM role '{role}'. Expected one of {sorted(provider_models)}"
+            f"Unknown LLM tier '{tier}'. Expected one of {sorted(provider_models)}"
         ) from None
 
 
@@ -119,19 +119,20 @@ def get_llm(
     model_name: str | None = None,
     temperature: float = 0.0,
     completions: int = 1,
-    role: str | None = None,
+    tier: str | None = None,
 ) -> BaseChatModel:
     """Get LLM with specified configuration.
 
     Args:
-        model_name: Explicit model to use. Bypasses the role registry. A name
+        model_name: Explicit model to use. Bypasses the tier registry. A name
             starting with ``openai:`` always routes to the OpenAI path
             (backward compatible); any other name routes to OpenRouter.
         temperature: Temperature for generation (honored on both providers).
         completions: How many completions we need (affects temperature for
             diversity — the 3-completion voting quality gate relies on this).
-        role: Pipeline role used to resolve the model from MODEL_REGISTRY
-            when ``model_name`` is not given.
+        tier: Cost/quality tier ("low", "mid", "high") used to resolve the
+            model from MODEL_REGISTRY when ``model_name`` is not given.
+            Defaults to "low".
 
     Returns:
         Configured LLM instance.
@@ -147,7 +148,7 @@ def get_llm(
         return _get_openrouter_llm(model_name, temperature)
 
     provider = settings.llm_provider
-    resolved = resolve_model(role=role, provider=provider)
+    resolved = resolve_model(tier=tier, provider=provider)
 
     if provider == "openrouter":
         return _get_openrouter_llm(resolved, temperature)

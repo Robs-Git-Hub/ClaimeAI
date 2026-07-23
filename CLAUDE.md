@@ -30,10 +30,10 @@ This fork strips the original to the agent backend only (no web frontend, no Chr
 - `langgraph.json` — graph registry for LangGraph CLI
 - `pyproject.toml` — Python dependencies (Poetry)
 - `utils/settings.py` — env var validation (Pydantic), incl. `LLM_PROVIDER` / `OPENROUTER_API_KEY`
-- `utils/models.py` — `get_llm()` factory + `MODEL_REGISTRY` (per-role model per provider)
+- `utils/models.py` — `get_llm()` factory + `MODEL_REGISTRY` (per-tier model per provider)
 - `claim_extractor/llm/config.py` — extraction temperature constants (models live in the registry)
 - `claim_verifier/llm/config.py` — verification temperature constants (models live in the registry)
-- `docs/llm-providers.md` — role × provider model mapping table
+- `docs/llm-providers.md` — tier × provider model mapping table
 - `docs/websearch-and-costs.md` — Exa/Tavily and LLM cost estimates
 
 ## Pipeline
@@ -48,7 +48,7 @@ Text → Sentence Split (NLTK) → Selection (voting) → Disambiguation (voting
 ### Quality gates
 
 - Selection and disambiguation use 3 LLM completions with 2/3 majority voting. Do not reduce this — it is the primary quality mechanism.
-- Evidence evaluation uses the most capable model tier (GPT-4.1 on OpenAI, Claude Opus on OpenRouter — see `MODEL_REGISTRY` in `utils/models.py`). Never map this role below Opus/GPT-4.1 tier.
+- Evidence evaluation uses the "high" tier (GPT-4.1 on OpenAI, Claude Opus on OpenRouter — see `MODEL_REGISTRY` in `utils/models.py`). Never map this tier below Opus/GPT-4.1.
 - Up to 5 search iterations per claim if evidence is insufficient.
 
 ## Running
@@ -77,7 +77,7 @@ Optional: `TAVILY_API_KEY`, `LANGSMITH_API_KEY`, `LLM_PROVIDER` (`openai` defaul
 
 ## Conventions
 
-- All LLM calls go through `utils/models.py:get_llm()` — nodes pass a `role` (`extraction`, `query_generation`, `search_decision`, `evidence_evaluation`) and the registry resolves the model for the active provider (OpenAI via `init_chat_model`, OpenRouter via `ChatOpenAI` against `https://openrouter.ai/api/v1`)
+- All LLM calls go through `utils/models.py:get_llm()` — nodes pass a `tier` (`low`, `mid`, `high`) and the registry resolves the model for the active provider (OpenAI via `init_chat_model`, OpenRouter via `ChatOpenAI` against `https://openrouter.ai/api/v1`)
 - Structured output via `llm.with_structured_output(PydanticModel)` everywhere
 - Voting via `utils/llm.py:process_with_voting()` — N completions, M required successes
 - Search provider configured in `claim_verifier/config/nodes.py` (default: `exa`)

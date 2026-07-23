@@ -2,9 +2,9 @@
 
 Central settings for language model behavior.
 
-Model selection lives in the per-role registry in ``utils/models.py``
-(MODEL_REGISTRY); verifier nodes request ``role="query_generation"``,
-``role="search_decision"``, or ``role="evidence_evaluation"``.
+Model selection lives in the per-tier registry in ``utils/models.py``
+(MODEL_REGISTRY); verifier nodes request ``tier="mid"`` (query generation,
+search decision) or ``tier="high"`` (evidence evaluation).
 """
 
 # Temperature settings

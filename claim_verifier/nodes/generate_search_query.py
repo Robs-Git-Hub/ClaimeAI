@@ -48,7 +48,7 @@ async def generate_search_query_node(
         f"(Iteration: {iteration_count + 1})"
     )
 
-    llm = get_llm(role="query_generation")
+    llm = get_llm(tier="mid")
 
     # Build context for iterative searching
     context_parts = []

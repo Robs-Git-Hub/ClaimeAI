@@ -40,7 +40,7 @@ async def _validate_claim(potential_claim: PotentialClaim) -> ValidatedClaim:
     ]
 
     # Use zero-temp LLM for consistent results
-    llm = get_llm(role="extraction")  # Uses default temperature for consistent results
+    llm = get_llm(tier="low")  # Uses default temperature for consistent results
 
     # Call the LLM
     response = await call_llm_with_structured_output(

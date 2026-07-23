@@ -58,7 +58,7 @@ async def search_decision_node(
         return Command(goto="evaluate_evidence")
 
     # Assess evidence sufficiency with LLM
-    llm = get_llm(role="search_decision")
+    llm = get_llm(tier="mid")
 
     evidence_summary = "\n".join(
         [

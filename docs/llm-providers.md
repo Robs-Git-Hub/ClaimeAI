@@ -1,9 +1,11 @@
 # LLM Providers and Model Mapping
 
 ClaimeAI supports two LLM providers, selected with the `LLM_PROVIDER` environment
-variable (`openai` by default, or `openrouter`). Each pipeline role is mapped to an
-appropriate model tier per provider in `MODEL_REGISTRY` (`utils/models.py`) — that
-registry is the single source of truth for model selection.
+variable (`openai` by default, or `openrouter`). Each pipeline node maps to one of
+three cost/quality tiers per provider in `MODEL_REGISTRY` (`utils/models.py`) — that
+registry is the single source of truth for model selection. Nodes only ever request
+a tier (`get_llm(tier="low")`, etc.), so swapping `LLM_PROVIDER` in `.env` is the only
+thing anyone needs to touch to move the whole pipeline between providers.
 
 ## Configuration
 
@@ -17,20 +19,18 @@ OpenRouter is accessed through its OpenAI-compatible endpoint
 (`https://openrouter.ai/api/v1`) via `langchain_openai.ChatOpenAI`, so structured
 output and temperature behave identically across providers.
 
-## Role × provider model mapping
+## Tier × provider model mapping
 
-| Role | Used by | `openai` | `openrouter` |
+| Tier | Used by | `openai` | `openrouter` |
 | --- | --- | --- | --- |
-| `extraction` | selection, disambiguation, decomposition, validation | `gpt-4o-mini` | `anthropic/claude-haiku-4.5` |
-| `query_generation` | generate_search_query | `gpt-4.1-mini` | `anthropic/claude-sonnet-5` |
-| `search_decision` | search_decision | `gpt-4.1-mini` | `anthropic/claude-sonnet-5` |
-| `evidence_evaluation` | evaluate_evidence | `gpt-4.1` | `anthropic/claude-opus-4.8` |
-| `default` | any call without a role | `gpt-4o-mini` | `anthropic/claude-haiku-4.5` |
+| `low` (default) | selection, disambiguation, decomposition, validation | `gpt-4o-mini` | `anthropic/claude-haiku-4.5` |
+| `mid` | generate_search_query, search_decision | `gpt-4.1-mini` | `anthropic/claude-sonnet-5` |
+| `high` | evaluate_evidence | `gpt-4.1` | `anthropic/claude-opus-4.8` |
 
 Notes:
 
-- **Evidence evaluation must never map below Opus-tier (OpenRouter) or
-  GPT-4.1-tier (OpenAI).** It produces the final verdict and is a quality gate.
+- **The `high` tier must never map below Opus-tier (OpenRouter) or GPT-4.1-tier
+  (OpenAI).** Evidence evaluation produces the final verdict and is a quality gate.
 - OpenRouter model IDs were verified against [openrouter.ai](https://openrouter.ai/anthropic)
   on 2026-07-22 (`claude-haiku-4.5`, `claude-sonnet-5`, `claude-opus-4.8` are the
   current Haiku/Sonnet/Opus tiers). Re-confirm before the first live paid run.
