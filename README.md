@@ -113,7 +113,7 @@ module/
 See [INSTALLATION.md](./INSTALLATION.md) for full setup instructions. In short: `poetry install`, copy `.env.example` to `.env` and fill in your keys, then start the dev server:
 
 ```bash
-langgraph dev --no-browser
+poetry run dev
 ```
 
 You can also run the pipeline directly from the CLI:

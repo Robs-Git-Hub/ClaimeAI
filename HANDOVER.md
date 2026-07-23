@@ -1,7 +1,7 @@
 # Session Handover
 
 **Last Updated:** 2026-07-22 (Session 2, outgoing)
-**Current Status:** Phase 01 IN PROGRESS — TG 01.1–01.5 complete; TG 01.6 partially complete
+**Current Status:** Phase 01 IN PROGRESS — TG 01.1–01.2 complete; TG 01.3–01.6 have open sub-tasks (all code done, live provider/search tests and cost tracking deferred)
 
 ---
 

@@ -3,7 +3,7 @@
 Accepts a PDF (extracted with Docling) or a plain .md/.markdown/.txt file
 (read directly, no Docling). Either way the content is chunked into
 sections and each section is sent through the `fact_checker` LangGraph
-(must be running: `langgraph dev --no-browser`). Results are written to
+(must be running: `poetry run dev`). Results are written to
 workspace/output/<file-stem>/:
 
     results.json  - structured per-section reports
@@ -257,7 +257,7 @@ def _looks_like_connection_error(exc: Exception) -> bool:
 def _die_server_not_running(url: str, exc: Exception) -> None:
     sys.exit(
         f"Could not reach the LangGraph server at {url} ({exc}).\n"
-        "Start it first with:\n\n    langgraph dev --no-browser\n"
+        "Start it first with:\n\n    poetry run dev\n"
     )
 
 

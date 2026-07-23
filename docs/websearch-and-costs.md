@@ -26,14 +26,14 @@ These are upper and lower estimates rather than fixed document costs. A claim re
 
 ## LLM costs
 
-LLM usage is driven by the per-role model mapping in `docs/llm-providers.md`. Approximate list prices per million tokens (input / output) for the three main roles:
+LLM usage is driven by the three-tier model mapping in `MODEL_REGISTRY` (`utils/models.py`). See `docs/playbook/model-tier-selection.md` for full rationale. Approximate list prices per million tokens (input / output):
 
-| Role | OpenAI model | ~$/M in/out | OpenRouter model | ~$/M in/out |
+| Tier | OpenAI model | ~$/M in/out | OpenRouter model | ~$/M in/out |
 | --- | --- | --- | --- | --- |
-| Extraction | `gpt-4o-mini` | $0.15 / $0.60 | `anthropic/claude-haiku-4.5` | $1 / $5 |
-| Query generation / search decision | `gpt-4.1-mini` | $0.40 / $1.60 | `anthropic/claude-sonnet-5` | $2 / $10 (intro; $3 / $15 standard) |
-| Evidence evaluation | `gpt-4.1` | $2 / $8 | `anthropic/claude-opus-4.8` | $5 / $25 |
+| low (extraction) | `gpt-4o-mini` | $0.15 / $0.60 | `google/gemma-4-26b-a4b-it` | $0.06 / $0.33 |
+| mid (query gen, search decision) | `gpt-4.1-mini` | $0.40 / $1.60 | `anthropic/claude-haiku-4.5` | $1 / $5 |
+| high (evidence evaluation) | `gpt-4.1` | $2 / $8 | `anthropic/claude-sonnet-5` | $2 / $10 |
 
-Rough order of magnitude per document: extraction makes 3 voting completions per sentence for two stages plus decomposition/validation on small prompts (typically cents), while evidence evaluation runs once per claim over up to ~15 retrieved snippets — this is the dominant LLM cost. Expect the OpenRouter (Claude) configuration to cost roughly 3–7× the OpenAI configuration per document at list prices.
+Rough order of magnitude per document: extraction makes 3 voting completions per sentence for two stages plus decomposition/validation on small prompts (typically cents), while evidence evaluation runs once per claim over up to ~15 retrieved snippets — this is the dominant LLM cost.
 
-> Anthropic prices above were checked against openrouter.ai on 2026-07-22; OpenAI prices are approximate recollections of list pricing and **need confirmation against openai.com/pricing** before budgeting.
+> Prices checked against openrouter.ai on 2026-07-22. OpenAI prices are approximate and **need confirmation against openai.com/pricing** before budgeting. OpenRouter pricing shown is standard; BYOK pricing may differ.

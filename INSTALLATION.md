@@ -32,7 +32,7 @@ cp .env.example .env
 docker compose up -d
 
 # Start the LangGraph dev server
-langgraph dev --no-browser
+poetry run dev
 ```
 
 ## Environment Variables
@@ -61,7 +61,7 @@ Edit `.env` with the following:
 
 ## Running the Fact-Checker
 
-With the dev server running (`langgraph dev --no-browser`), three graphs are available: `claim_extractor`, `claim_verifier`, and `fact_checker`.
+With the dev server running (`poetry run dev`), three graphs are available: `claim_extractor`, `claim_verifier`, and `fact_checker`.
 
 You can also run the pipeline directly from the CLI:
 
