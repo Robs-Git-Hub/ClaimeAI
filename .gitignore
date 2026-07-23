@@ -182,3 +182,9 @@ build/
 
 # machine-local poetry config (short venv path for Windows MAX_PATH)
 poetry.toml
+
+# PDF fact-checking workspace: keep the directories, ignore their contents
+workspace/inbox/*
+workspace/output/*
+!workspace/inbox/.gitkeep
+!workspace/output/.gitkeep

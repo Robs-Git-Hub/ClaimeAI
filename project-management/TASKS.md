@@ -48,14 +48,14 @@ Session 2 environment notes: Poetry 2.4.1 installed via `uv tool install poetry`
 TDD: new `tests/` directory (pytest). Provider selection is unit-testable without API calls.
 Tiers: NARROW = targeted test file, no network. MID = full pytest suite. FULL = live end-to-end (spends API credit — milestones only).
 
-- [ ] 01.3.1a Set up pytest; write failing tests for settings (`LLM_PROVIDER` values, `OPENROUTER_API_KEY` field, existing `sk-proj-` validator untouched) in `tests/test_settings.py` → NARROW
-- [ ] 01.3.1b Implement `LLM_PROVIDER` + `OPENROUTER_API_KEY` in `utils/settings.py` (tests pass) — OpenRouter key MUST be its own field: the `sk-proj-` validator rejects OpenRouter keys → NARROW
-- [ ] 01.3.2a Write failing tests for `get_llm()` provider branching (openai default unchanged; openrouter → base_url + openrouter key) in `tests/test_models.py` → NARROW
-- [ ] 01.3.2b Implement OpenRouter branch in `utils/models.py:get_llm()` (tests pass) → NARROW
-- [ ] 01.3.3 Reconcile dead `MODEL_NAME` constants: `llm/config.py` values are never passed to `get_llm()` — wire per-role model selection (incl. provider-specific mapping) through config so the mapping table is real, not aspirational → MID
-- [ ] 01.3.4 Route `claim_verifier/nodes/evaluate_evidence.py:92` hardcoded model through the mapping (Opus-tier on OpenRouter — never below) → MID
-- [ ] 01.3.5 Live test both providers with a 1–2 claim input → FULL
-- [ ] 01.3.6 Docs: model mapping table, CLAUDE.md env vars, `.env.example` (`OPENROUTER_API_KEY`, `LLM_PROVIDER`), add LLM cost section to `docs/websearch-and-costs.md`
+- [x] 01.3.1a Failing tests for settings written first (13 tests, env-isolated)
+- [x] 01.3.1b `LLM_PROVIDER` (case-insensitive, validated) + `OPENROUTER_API_KEY` (`sk-or-` prefix) in `utils/settings.py`
+- [x] 01.3.2a Failing tests for `get_llm()` provider branching written first (19 tests, no network)
+- [x] 01.3.2b OpenRouter branch in `utils/models.py` (ChatOpenAI vs openrouter.ai/api/v1; temperature honored both paths incl. voting 0.2 rule)
+- [x] 01.3.3 Dead `MODEL_NAME` constants retired; `MODEL_REGISTRY` (role × provider) is now the single source of truth; nodes pass roles. Note: query_generation/search_decision now genuinely run gpt-4.1-mini on openai (previously silently ran the gpt-4o-mini default) — matches documented intent, pre-approved
+- [x] 01.3.4 `evaluate_evidence.py` routed through `evidence_evaluation` role; Opus-tier floor commented in registry. OpenRouter IDs verified live 2026-07-22: claude-haiku-4.5 / claude-sonnet-5 / claude-opus-4.8
+- [ ] 01.3.5 Live test both providers with a 1–2 claim input → FULL — BLOCKED: needs OPENROUTER_API_KEY + OPENAI_API_KEY in .env (no keys in this environment); re-confirm OpenRouter model IDs at first paid run
+- [x] 01.3.6 Docs: `docs/llm-providers.md` mapping table, CLAUDE.md, `.env.example`, INSTALLATION.md, LLM cost section in websearch-and-costs.md (OpenRouter pricing verified; OpenAI list prices flagged as needing confirmation)
 
 ### TG 01.4: PDF Ingest
 
