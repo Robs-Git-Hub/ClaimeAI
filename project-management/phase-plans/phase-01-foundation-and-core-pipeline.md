@@ -109,3 +109,13 @@ End-to-end test on a real paper. Update handover.
 4. **Model tier abstraction is worth doing early.** The original role-based registry (5 roles × 2 providers) was confusing — multiple roles mapped to the same model, making cross-provider comparison hard. Refactoring to 3 tiers (low/mid/high) simplified the registry, made costs comparable at a glance, and let the user immediately spot that the OpenRouter tiers were over-specced. Record rationale in a playbook doc, not just code comments.
 
 5. **Prep import/path analysis saved significant time.** The flatten (TG 01.2, 199 files changed) completed with zero import rewrites because prep confirmed all imports were absolute top-level package names with no sys.path hacks. Without that confidence the flatten would have required iterative testing after each batch of moves.
+
+### Session 3 (2026-07-23)
+
+6. **Check installed library capabilities before designing workarounds.** Prep discovered that `ChatOpenAI` in langchain-openai already has a built-in `reasoning_effort` parameter — no `extra_body` hack needed. Grepping the installed package source (`langchain_openai/chat_models/base.py`) revealed the parameter at line 504, saving a custom implementation.
+
+7. **Cost tracking needs to be purpose-built.** The only existing token-related code (`estimate_token_count` in `utils/llm.py`) is for truncation, not tracking. No infrastructure exists for API usage monitoring — it must be built from scratch for search providers.
+
+8. **Architecture audit at phase boundary found clean structure.** Dependency direction is correct across all packages (all imports point inward). Zero config duplication, zero model name hardcoding outside the registry. One dead-code finding: `utils/__init__.py` exports 3 checkpointer functions that don't exist — cleanup task added.
+
+9. **Simple call-counter over class-based tracker for cost tracking.** Langchain's Exa/Tavily wrappers don't expose response metadata (usage stats, remaining credits). Cost tracking must be call-count-based with hardcoded per-call estimates. Phase 02 (argument chain verification) doesn't use web search, so this is Phase 01-specific — a class-based `CostTracker` with generic operation types would be YAGNI.
