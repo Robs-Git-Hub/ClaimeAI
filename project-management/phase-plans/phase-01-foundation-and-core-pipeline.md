@@ -27,9 +27,17 @@ Set up CLAUDE.md, HANDOVER.md, project-management directory, REPO note in contro
 
 ### TG 01.2: Strip to Agent-Only
 
-Remove the Next.js web app (`apps/web/`), Chrome extension (`apps/extension/`), and Turborepo orchestration. Flatten `apps/agent/*` to the repo root. Remove ~2GB of unused ML dependencies (torch, transformers, sentence-transformers, etc.) that are declared but never imported.
+Remove the Next.js web app (`apps/web/`), Chrome extension (`apps/extension/`), and Turborepo orchestration. Flatten `apps/agent/*` to the repo root. Remove all unused ML dependencies (torch, transformers, sentence-transformers, huggingface-hub, scikit-learn, scipy, numpy) — prep confirmed zero imports for all of them; nltk stays (used by the sentence splitter).
 
-**Risk:** Path references in `langgraph.json` and internal imports may break after flattening. Run `langgraph dev` and the test scripts after every structural change.
+**Prep findings (Session 2) that de-risk the flatten:**
+- All Python imports are absolute top-level package imports; no `sys.path` hacks or relative paths anywhere. `langgraph.json` graph paths are relative to its own location. **No import rewrites needed** — move files and go.
+- `.env` loading is CWD-relative (both `load_dotenv()` and pydantic-settings), so `.env` just moves to root.
+- **`apps/web/docker-compose.yml` provides the agent's Redis/Postgres stack** — relocate a slimmed version to root BEFORE deleting `apps/web/`.
+- pyproject cleanup needed: `security` package missing from `packages` list (but imported); dangling `create-run` script entry points at a nonexistent file.
+- Redis is optional for local dev — only the dormant API-key auth flow uses it (`langgraph.json` has no `auth` key).
+- **Decision (user-approved):** promote `apps/agent/README.md` to root README with fork framing, rather than patching the stale monorepo README.
+
+**Verification (no test suite exists upstream):** goal is all three packages import cleanly and all three graphs register in `langgraph dev`. Cheap offline checks first; live end-to-end runs are reserved for TG milestones since they spend API credit.
 
 ### TG 01.3: OpenRouter Integration
 
@@ -45,11 +53,19 @@ Model mapping (OpenAI → OpenRouter/Claude equivalents):
 
 **Important:** The voting mechanism (3 completions, 2/3 consensus) and evidence evaluation must use capable models. Do not map the evidence evaluation call to anything below Opus-tier.
 
+**Prep findings (Session 2):**
+- The single integration point is `utils/models.py:get_llm()` — it hardwires `settings.openai_api_key`. The only explicit model override in the codebase is `claim_verifier/nodes/evaluate_evidence.py:92` (`openai:gpt-4.1`).
+- The `MODEL_NAME` constants in both `llm/config.py` files are **dead code** — never passed to `get_llm()`. At runtime everything uses gpt-4o-mini except evidence evaluation. The mapping table above describes intent, not current behavior; TG 01.3 wires per-role model config for real.
+- The `sk-proj-` prefix validator on `openai_api_key` in `utils/settings.py` will reject OpenRouter keys — OpenRouter gets its own settings field.
+- **TDD:** this TG introduces the repo's first tests (`tests/`, pytest). Provider selection and settings validation are unit-testable offline; live API runs only at the TG milestone.
+
 ### TG 01.4: PDF Ingest
 
 Add a thin `ingest/` module that reads PDFs and outputs structured text. Reuse the Docling process from doc-rag-backend where possible — it already handles PDF parsing with sentence-level output.
 
-**Investigation needed (on Mac):** Check doc-rag-backend for a standalone function that takes a PDF and returns sentences with metadata. If it exists, extract or import it. If not, use `pymupdf` or `docling` directly.
+**Investigation needed (on Mac):** Check doc-rag-backend for a standalone function that takes a PDF and returns sentences with metadata. If it exists, extract or import it.
+
+**Decision (user, Session 2):** Use `docling` directly, without waiting on the doc-rag-backend investigation. The transitive ML deps (torch etc.) are accepted — they are used dependencies of a real feature, unlike the removed declared-but-unused ones. Align output formats with doc-rag-backend later if the Mac investigation surfaces a better pattern.
 
 The ingest module feeds sections to the existing fact-checker graph. Long papers are chunked by section and processed independently.
 
