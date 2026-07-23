@@ -7,7 +7,13 @@ builds a local object. Tests inspect the returned client's configuration.
 import pytest
 
 import utils.models as models
-from utils.models import MODEL_REGISTRY, OPENROUTER_BASE_URL, get_llm, resolve_model
+from utils.models import (
+    MODEL_REGISTRY,
+    OPENROUTER_BASE_URL,
+    REASONING_CONFIG,
+    get_llm,
+    resolve_model,
+)
 
 
 @pytest.fixture
@@ -163,3 +169,39 @@ def test_explicit_openai_model_routes_to_openai_even_under_openrouter(
     llm = get_llm(model_name="openai:gpt-4.1")
     assert llm.model_name == "gpt-4.1"
     assert getattr(llm, "openai_api_base", None) != OPENROUTER_BASE_URL
+
+
+# ---------------------------------------------------------------------------
+# Reasoning effort (hybrid-reasoning models, e.g. Sonnet 5 on OpenRouter)
+# ---------------------------------------------------------------------------
+
+
+def test_reasoning_config_comes_from_dict_not_hardcoded():
+    # The reasoning effort value must be sourced from REASONING_CONFIG, not
+    # hardcoded inline in get_llm/_get_openrouter_llm.
+    assert REASONING_CONFIG["openrouter"]["high"] == "medium"
+    assert REASONING_CONFIG["openrouter"]["low"] is None
+    assert REASONING_CONFIG["openrouter"]["mid"] is None
+
+
+def test_openrouter_high_tier_gets_reasoning_effort(openrouter_settings):
+    llm = get_llm(tier="high")
+    assert llm.model_name == "anthropic/claude-sonnet-5"
+    assert llm.reasoning_effort == "medium"
+
+
+def test_openrouter_low_tier_no_reasoning_effort(openrouter_settings):
+    llm = get_llm(tier="low")
+    assert getattr(llm, "reasoning_effort", None) is None
+
+
+def test_openrouter_mid_tier_no_reasoning_effort(openrouter_settings):
+    llm = get_llm(tier="mid")
+    assert getattr(llm, "reasoning_effort", None) is None
+
+
+def test_openai_provider_never_gets_reasoning_effort(openai_settings):
+    # OpenAI path never sets reasoning_effort, regardless of tier.
+    for tier in ("low", "mid", "high"):
+        llm = get_llm(tier=tier)
+        assert getattr(llm, "reasoning_effort", None) is None

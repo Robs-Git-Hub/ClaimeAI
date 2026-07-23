@@ -11,6 +11,7 @@ from langchain_tavily import TavilySearch
 
 from claim_verifier.config import EVIDENCE_RETRIEVAL_CONFIG
 from claim_verifier.schemas import ClaimVerifierState, Evidence
+from utils.cost_tracking import record_search
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ class SearchProviders:
             )
 
             results = await retriever.ainvoke(query)
+            record_search("exa")
 
             evidence = [
                 Evidence(
@@ -61,6 +63,7 @@ class SearchProviders:
             )
 
             results = await search.ainvoke(query)
+            record_search("tavily")
             evidence = SearchProviders._parse_tavily_results(results)
 
             logger.info(f"Retrieved {len(evidence)} evidence items")

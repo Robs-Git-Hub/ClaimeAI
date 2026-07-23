@@ -53,6 +53,17 @@ MODEL_REGISTRY: dict[str, dict[str, str]] = {
     },
 }
 
+# Per-tier reasoning effort configuration.
+# Only models with hybrid-reasoning capability (e.g., Sonnet 5) need this.
+# Values: "low", "medium", "high", or None (no reasoning effort set).
+REASONING_CONFIG: dict[str, dict[str, str | None]] = {
+    "openrouter": {
+        "low": None,
+        "mid": None,
+        "high": "medium",
+    },
+}
+
 
 def resolve_model(tier: str | None = None, provider: str | None = None) -> str:
     """Resolve a pipeline tier to a provider-specific model name.
@@ -98,7 +109,9 @@ def _get_openai_llm(model_name: str, temperature: float) -> BaseChatModel:
     )
 
 
-def _get_openrouter_llm(model_name: str, temperature: float) -> BaseChatModel:
+def _get_openrouter_llm(
+    model_name: str, temperature: float, reasoning_effort: str | None = None
+) -> BaseChatModel:
     """Build a chat model against OpenRouter's OpenAI-compatible endpoint."""
     if not settings.openrouter_api_key:
         raise ValueError(
@@ -106,11 +119,16 @@ def _get_openrouter_llm(model_name: str, temperature: float) -> BaseChatModel:
             "Set OPENROUTER_API_KEY (or switch LLM_PROVIDER to 'openai')."
         )
 
+    kwargs = {}
+    if reasoning_effort is not None:
+        kwargs["reasoning_effort"] = reasoning_effort
+
     return ChatOpenAI(
         model=model_name,
         api_key=settings.openrouter_api_key,
         base_url=OPENROUTER_BASE_URL,
         temperature=temperature,
+        **kwargs,
     )
 
 
@@ -141,7 +159,7 @@ def get_llm(
         temperature = 0.2
 
     if model_name is not None:
-        # Explicit model name: route by its format for backward compatibility.
+        # Explicit model name bypasses tier registry (including REASONING_CONFIG).
         if model_name.startswith("openai:"):
             return _get_openai_llm(model_name, temperature)
         return _get_openrouter_llm(model_name, temperature)
@@ -150,7 +168,8 @@ def get_llm(
     resolved = resolve_model(tier=tier, provider=provider)
 
     if provider == "openrouter":
-        return _get_openrouter_llm(resolved, temperature)
+        reasoning_effort = REASONING_CONFIG.get(provider, {}).get(tier or "low")
+        return _get_openrouter_llm(resolved, temperature, reasoning_effort)
     return _get_openai_llm(resolved, temperature)
 
 
