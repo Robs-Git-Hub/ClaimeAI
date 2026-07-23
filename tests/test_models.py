@@ -48,17 +48,17 @@ def test_resolve_model_openai_tiers():
 def test_resolve_model_openrouter_tiers():
     assert (
         resolve_model(tier="low", provider="openrouter")
-        == "anthropic/claude-haiku-4.5"
+        == "google/gemma-4-26b-a4b-it"
     )
     assert (
         resolve_model(tier="mid", provider="openrouter")
-        == "anthropic/claude-sonnet-5"
+        == "anthropic/claude-haiku-4.5"
     )
     assert (
         resolve_model(tier="high", provider="openrouter")
-        == "anthropic/claude-opus-4.8"
+        == "anthropic/claude-sonnet-5"
     )
-    assert resolve_model(provider="openrouter") == "anthropic/claude-haiku-4.5"
+    assert resolve_model(provider="openrouter") == "google/gemma-4-26b-a4b-it"
 
 
 def test_resolve_model_rejects_unknown_tier():
@@ -66,10 +66,10 @@ def test_resolve_model_rejects_unknown_tier():
         resolve_model(tier="nonexistent_tier", provider="openai")
 
 
-def test_evidence_evaluation_never_below_opus_tier():
-    # Quality gate: evidence evaluation must stay on the most capable models.
-    assert "opus" in MODEL_REGISTRY["openrouter"]["high"]
+def test_evidence_evaluation_quality_gate():
+    # Quality gate: high tier must be the smartest non-reasoning model per provider.
     assert MODEL_REGISTRY["openai"]["high"] == "openai:gpt-4.1"
+    assert MODEL_REGISTRY["openrouter"]["high"] == "anthropic/claude-sonnet-5"
 
 
 # ---------------------------------------------------------------------------
@@ -124,17 +124,17 @@ def test_openrouter_client_base_url_and_key(openrouter_settings):
     llm = get_llm(tier="low")
     assert llm.openai_api_base == OPENROUTER_BASE_URL
     assert llm.openai_api_key.get_secret_value() == "sk-or-v1-test"
-    assert llm.model_name == "anthropic/claude-haiku-4.5"
+    assert llm.model_name == "google/gemma-4-26b-a4b-it"
 
 
 def test_openrouter_tier_resolution(openrouter_settings):
-    assert get_llm(tier="mid").model_name == "anthropic/claude-sonnet-5"
-    assert get_llm(tier="high").model_name == "anthropic/claude-opus-4.8"
+    assert get_llm(tier="mid").model_name == "anthropic/claude-haiku-4.5"
+    assert get_llm(tier="high").model_name == "anthropic/claude-sonnet-5"
 
 
 def test_openrouter_default_tier(openrouter_settings):
     llm = get_llm()
-    assert llm.model_name == "anthropic/claude-haiku-4.5"
+    assert llm.model_name == "google/gemma-4-26b-a4b-it"
 
 
 def test_openrouter_temperature_honored(openrouter_settings):

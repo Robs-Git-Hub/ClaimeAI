@@ -32,13 +32,12 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 #   mid  — mid-cost reasoning calls: search query generation and the
 #          search-continue/stop decision.
 #   high — final verdict on a claim (evidence evaluation).
-#          QUALITY GATE: evidence evaluation — never map below Opus/GPT-4.1
-#          tier. This is the primary quality mechanism of the verifier; do
-#          not downgrade this call.
+#          QUALITY GATE: gpt-4.1 is OpenAI's smartest non-reasoning model;
+#          Sonnet 5 is Anthropic's frontier non-reasoning model. Never map
+#          this tier below these — it is the primary quality mechanism.
 #
-# OpenRouter model IDs verified against openrouter.ai on 2026-07-22
-# (current tiers: claude-haiku-4.5 / claude-sonnet-5 / claude-opus-4.8).
-# Re-confirm IDs at live-test time (task 01.3.5) before first paid run.
+# Rationale: docs/playbook/model-tier-selection.md
+# OpenRouter IDs verified against openrouter.ai on 2026-07-22.
 MODEL_REGISTRY: dict[str, dict[str, str]] = {
     "openai": {
         "low": "openai:gpt-4o-mini",
@@ -46,11 +45,11 @@ MODEL_REGISTRY: dict[str, dict[str, str]] = {
         "high": "openai:gpt-4.1",
     },
     "openrouter": {
-        "low": "anthropic/claude-haiku-4.5",
-        "mid": "anthropic/claude-sonnet-5",
-        # Never below Opus-tier — evidence evaluation is the primary
-        # quality mechanism of the verifier.
-        "high": "anthropic/claude-opus-4.8",
+        "low": "google/gemma-4-26b-a4b-it",
+        "mid": "anthropic/claude-haiku-4.5",
+        # Sonnet 5 is Anthropic's frontier non-reasoning model, price-matched
+        # to gpt-4.1 ($2/$10 vs $2/$8). Never downgrade this tier.
+        "high": "anthropic/claude-sonnet-5",
     },
 }
 
