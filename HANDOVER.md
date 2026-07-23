@@ -7,11 +7,11 @@
 
 ## Start Here
 
-**Outgoing session completed:** Flattened repo to agent-only, added OpenRouter provider with tier-based model registry, added Docling PDF ingest + run_from_pdf CLI, created /claimify skill, fixed NLTK blocking, verified OpenAI provider live (14 claims, 12 supported / 2 refuted), rebalanced OpenRouter tier mapping (Gemma/Haiku/Sonnet), created model selection playbook. 63 offline tests, 11 commits (unpushed).
+**Outgoing session completed:** Flattened repo to agent-only, added OpenRouter provider with tier-based model registry, added Docling PDF ingest + run_from_pdf CLI, created /claimify skill, fixed NLTK blocking, verified OpenAI provider live (14 claims, 12 supported / 2 refuted), rebalanced OpenRouter tier mapping (Gemma/Haiku/Sonnet), created model selection playbook, corrected Sonnet 5 as hybrid-reasoning model (reasoning level needs setting). 63 offline tests, 13 commits (unpushed).
 
 **Incoming session should:**
 
-1. **Live-test OpenRouter provider.** Set `LLM_PROVIDER=openrouter` in `.env`, run a short fact-check (1–2 claim `.txt` file). This tests the full Gemma 4 → Haiku 4.5 → Sonnet 5 tier chain. Re-confirm OpenRouter model IDs haven't changed.
+1. **Live-test OpenRouter provider.** Set `LLM_PROVIDER=openrouter` in `.env`, run a short fact-check (1–2 claim `.txt` file). This tests the full Gemma 4 → Haiku 4.5 → Sonnet 5 tier chain. **Important:** Sonnet 5 is a hybrid-reasoning model — the reasoning effort level needs to be set when constructing the ChatOpenAI client for the high tier (not yet implemented). Re-confirm OpenRouter model IDs haven't changed.
 2. **Live-test Exa vs Tavily.** Swap `search_provider` in `claim_verifier/config/nodes.py` from `"exa"` to `"tavily"`, run the same short test. Compare result quality and speed.
 3. **Add search credit/cost tracking.** Build a module that tracks per-run Exa/Tavily API usage (searches made, estimated cost) and reports remaining free tier balance. Exa: $20 initial + $10/month free. Tavily: 1,000 free credits/month.
 4. **Test on a real academic paper.** Drop a PDF in `workspace/inbox/`, run `/claimify`. This is the Phase 01 milestone gate.
@@ -86,7 +86,8 @@ Rationale: `docs/playbook/model-tier-selection.md`
 | `bc8cf60` | fix: --allow-blocking + NLTK data pre-download |
 | `eeb26e9` | refactor: simplify MODEL_REGISTRY from 5 roles to 3 tiers |
 | `16f20b2` | refactor: rebalance OpenRouter tiers; add model selection playbook |
-| (pending) | docs: session 2 wrap |
+| `cae004e` | docs: session 2 wrap |
+| `d6285c5` | docs: correct Sonnet 5 as hybrid-reasoning model |
 
 ---
 
@@ -95,4 +96,4 @@ Rationale: `docs/playbook/model-tier-selection.md`
 | Date | What was done |
 |------|---------------|
 | 2026-07-22 | Session 1: Fork, clone, PM setup, assessment artifact, websearch-and-costs doc |
-| 2026-07-22 | Session 2: Flatten to agent-only, OpenRouter + tier-based registry, PDF ingest (Docling), /claimify skill, NLTK fix, OpenAI live test, tier rebalancing (Gemma/Haiku/Sonnet), model selection playbook. 63 offline tests. 11 commits (unpushed). |
+| 2026-07-22 | Session 2: Flatten to agent-only, OpenRouter + tier-based registry, PDF ingest (Docling), /claimify skill, NLTK fix, OpenAI live test, tier rebalancing (Gemma/Haiku/Sonnet), model selection playbook, Sonnet 5 hybrid-reasoning correction. 63 offline tests. 13 commits (unpushed). |
