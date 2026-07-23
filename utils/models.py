@@ -33,7 +33,7 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 #          search-continue/stop decision.
 #   high — final verdict on a claim (evidence evaluation).
 #          QUALITY GATE: gpt-4.1 is OpenAI's smartest non-reasoning model;
-#          Sonnet 5 is Anthropic's frontier non-reasoning model. Never map
+#          Sonnet 5 is Anthropic's frontier hybrid-reasoning model. Never map
 #          this tier below these — it is the primary quality mechanism.
 #
 # Rationale: docs/playbook/model-tier-selection.md
@@ -47,7 +47,7 @@ MODEL_REGISTRY: dict[str, dict[str, str]] = {
     "openrouter": {
         "low": "google/gemma-4-26b-a4b-it",
         "mid": "anthropic/claude-haiku-4.5",
-        # Sonnet 5 is Anthropic's frontier non-reasoning model, price-matched
+        # Sonnet 5 is Anthropic's frontier hybrid-reasoning model, price-matched
         # to gpt-4.1 ($2/$10 vs $2/$8). Never downgrade this tier.
         "high": "anthropic/claude-sonnet-5",
     },

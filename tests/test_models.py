@@ -67,7 +67,7 @@ def test_resolve_model_rejects_unknown_tier():
 
 
 def test_evidence_evaluation_quality_gate():
-    # Quality gate: high tier must be the smartest non-reasoning model per provider.
+    # Quality gate: high tier must be the smartest model per provider.
     assert MODEL_REGISTRY["openai"]["high"] == "openai:gpt-4.1"
     assert MODEL_REGISTRY["openrouter"]["high"] == "anthropic/claude-sonnet-5"
 

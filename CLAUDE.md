@@ -48,7 +48,7 @@ Text → Sentence Split (NLTK) → Selection (voting) → Disambiguation (voting
 ### Quality gates
 
 - Selection and disambiguation use 3 LLM completions with 2/3 majority voting. Do not reduce this — it is the primary quality mechanism.
-- Evidence evaluation uses the "high" tier (GPT-4.1 — OpenAI's smartest non-reasoning model, or Claude Sonnet 5 — Anthropic's frontier non-reasoning model). Never downgrade this tier. See `docs/playbook/model-tier-selection.md` for rationale.
+- Evidence evaluation uses the "high" tier (GPT-4.1 — OpenAI's smartest non-reasoning model, or Claude Sonnet 5 — Anthropic's frontier hybrid-reasoning model with selectable effort levels). Never downgrade this tier. See `docs/playbook/model-tier-selection.md` for rationale.
 - Up to 5 search iterations per claim if evidence is insufficient.
 
 ## Running

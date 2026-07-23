@@ -44,12 +44,12 @@ Tiers are matched **across providers by class and cost band**, not by name. A "l
 
 **Why this tier exists:** This is the final verdict — Supported, Refuted, Insufficient Information, or Conflicting Evidence. The model must carefully weigh retrieved web evidence against the claim, handle nuance (partial support, conflicting sources, paywalled content), and produce a reasoned judgment. This is the primary quality mechanism of the verifier.
 
-**What to look for:** smartest non-reasoning model available. Balance of intelligence, speed, and cost. Never downgrade this tier — verdict quality is the product.
+**What to look for:** smartest model available that balances intelligence, speed, and cost. Never downgrade this tier — verdict quality is the product.
 
 | Provider | Model | Price (in/out per 1M) | Key characteristics |
 |----------|-------|----------------------|---------------------|
 | OpenAI | `gpt-4.1` | $2 / $8 | **OpenAI's smartest non-reasoning model.** 1M context. Replaced GPT-4o as the recommended API model. Best instruction-following and coding in OpenAI's lineup (non-o-series). Chosen for evidence evaluation because it balances intelligence, speed, and cost. |
-| OpenRouter | `anthropic/claude-sonnet-5` | $2 / $10 | **Anthropic's most capable Sonnet.** 1M context. Frontier performance across coding, agents, and professional work. Price-comparable to gpt-4.1 ($2/$8 vs $2/$10). Adaptive reasoning with selectable effort levels. Anthropic's recommended model for production use. |
+| OpenRouter | `anthropic/claude-sonnet-5` | $2 / $10 | **Anthropic's most capable Sonnet — a hybrid-reasoning model.** 1M context. Frontier performance across coding, agents, and professional work. Supports adaptive reasoning with selectable effort levels (low/medium/high/max/x-high) — the reasoning level should be set when constructing the client for evidence evaluation. Price-comparable to gpt-4.1 ($2/$8 vs $2/$10). Anthropic's recommended model for production use. |
 
 ## Why not Opus?
 

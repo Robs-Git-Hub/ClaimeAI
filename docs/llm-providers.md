@@ -33,7 +33,7 @@ output and temperature behave identically across providers.
 Notes:
 
 - **The `high` tier must never be downgraded.** `gpt-4.1` is OpenAI's smartest
-  non-reasoning model; `claude-sonnet-5` is Anthropic's frontier non-reasoning
+  non-reasoning model; `claude-sonnet-5` is Anthropic's frontier hybrid-reasoning
   model. Evidence evaluation produces the final verdict and is the quality gate.
 - OpenRouter model IDs verified against [openrouter.ai](https://openrouter.ai)
   on 2026-07-22. Re-confirm before the first live paid run.
