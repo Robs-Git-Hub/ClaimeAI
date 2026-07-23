@@ -1,31 +1,23 @@
 # Session Handover
 
-**Last Updated:** 2026-07-23 (Session 3, outgoing)
-**Current Status:** Phase 01 NEARLY COMPLETE — all code and live provider/search tests done; real academic paper PDF test deferred pending design discussion on verification scope
+**Last Updated:** 2026-07-23 (Session 4, outgoing)
+**Current Status:** Phase 01 COMPLETE (one minor item open: `/claimify` skill not tested end-to-end). Phase 02 plan written.
 
 ---
 
 ## Start Here
 
-**Outgoing session completed:** Reasoning effort for Sonnet 5 (REASONING_CONFIG + ChatOpenAI built-in param), search cost tracking module (call-count-based with INFO logging), dead export cleanup, config.toml extraction (secrets in .env, config in config.toml), OpenRouter live test (2 claims, 2 supported via Gemma→Haiku→Sonnet 5), Exa vs Tavily comparison (both produce correct verdicts; Tavily returns ~35× more raw content), architecture audit (clean), completion review with fixes. 87 offline tests, 7 commits (unpushed).
+**Outgoing session completed:** Emoji fix in `scripts/dev.py`, design discussion on academic verification scope (cited vs citation-free claims, vault integration, cost optimization), Phase 02 plan written (`phase-02-vault-verification-core.md`), first full academic paper PDF test (ukraine working paper, 448 claims, $10 cost — cost analysis recorded), TASKS.md updated, cost CSV cleaned up.
 
 **Incoming session should:**
 
-1. **Push to origin.** 4 commits on `main`, not yet pushed.
+1. **Test `/claimify` skill end-to-end** (01.5.3). The pipeline works via `run_from_pdf.py` directly (proven Session 4), but the Claude Code `/claimify` skill wrapper has never been exercised. Quick test: start the dev server, then invoke `/claimify workspace/inbox/MS-DRAFT-working-paper-v4.pdf`. Warning: this will spend ~$10 in OpenAI API credit (see cost analysis below).
 
-2. **Design discussion: verification scope for academic papers.** Before running 01.6.1d (real paper PDF test), the user wants to discuss what "success" looks like. The current pipeline verifies claims against web search — this works for factual claims but academic papers need literature-corpus verification. The user has several routes into the literature corpus that should be considered:
-   - **PRISMA search tools** — systematic review infrastructure (massive undertakings)
-   - **OpenAlex and Google Scholar sub-tools** — simpler academic search
-   - **doc-to-RAG pipeline** — ingest select sets of academic papers into RAGable databases relevant to a claim search
-   - **Obsidian vaults with argument chains** — distilled notes (SOURCE-, QUOTE-, PARA-, CLAIM-, THESIS-) from the literature
-   
-   This is a design question that affects Phase 01 scope (is the PDF test just "does the pipeline run?" or "does it produce useful academic verification?") and Phase 02 planning (argument chain verification was always planned, but the literature search tools expand the picture).
+2. **Review the Phase 02 plan** (`project-management/phase-plans/phase-02-vault-verification-core.md`). It covers vault verification of a markdown draft with wikilink citations — the "best case" scenario using the ukraine working paper as test corpus. The plan was written collaboratively in Session 4 with 8 design pillars agreed. The user should confirm they're happy with the TG breakdown before implementation begins.
 
-3. **Run the academic paper PDF test** (01.6.1d) once the verification scope is agreed. Drop a PDF in `workspace/inbox/`, start the server, run `poetry run python scripts/run_from_pdf.py <path>`.
+3. **Decide whether to begin Phase 02 implementation** or address cost optimization first. The $10/paper cost with current settings may warrant tuning `config.toml` (reduce `max_search_iterations` from 5 to 2–3, reduce `results_per_query`) before running more live tests. See cost analysis in memory and Lesson 11 in the phase plan.
 
-4. **Fix the `scripts/dev.py` emoji encoding issue.** The rocket emoji (🚀) in the print statement causes `UnicodeEncodeError` on Windows cp1252. Quick fix: remove the emoji or set `PYTHONIOENCODING=utf-8`. Current workaround: run `poetry run langgraph dev --no-browser --allow-blocking` directly.
-
-**Phase plan:** `project-management/phase-plans/phase-01-foundation-and-core-pipeline.md`
+**Phase plan:** `project-management/phase-plans/phase-02-vault-verification-core.md`
 
 ---
 
@@ -37,9 +29,9 @@ Agent packages at root: `claim_extractor/`, `claim_verifier/`, `fact_checker/`, 
 
 ### Configuration
 
-**`config.toml`** (new in Session 3) — non-sensitive pipeline config. Sections: `[pipeline]` (llm_provider, search_provider, results_per_query, max_search_iterations), `[models.*]` (tier→model mapping per provider), `[reasoning.*]` (reasoning effort per provider/tier). Environment variables override config.toml values via Pydantic.
+**`config.toml`** — non-sensitive pipeline config. Sections: `[pipeline]` (llm_provider, search_provider, results_per_query, max_search_iterations), `[models.*]` (tier→model mapping per provider), `[reasoning.*]` (reasoning effort per provider/tier). Environment variables override config.toml values via Pydantic.
 
-**`.env`** — secrets only: `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `EXA_API_KEY`, `TAVILY_API_KEY`, `REDIS_URI`/`REDIS_URL`. `LLM_PROVIDER` removed from `.env` — now in `config.toml`.
+**`.env`** — secrets only: `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `EXA_API_KEY`, `TAVILY_API_KEY`, `REDIS_URI`/`REDIS_URL`.
 
 ### Environment
 
@@ -48,9 +40,9 @@ Agent packages at root: `claim_extractor/`, `claim_verifier/`, `fact_checker/`, 
 | Python | 3.11.15 via uv (`~\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\python.exe`) |
 | Poetry | 2.4.1 via `uv tool install poetry` |
 | Venv | `C:\vpy\claime-agent-j1KWVyi4-py3.11` (short path for Windows MAX_PATH) |
-| langgraph-cli | 0.4.8 / langgraph-api 0.4.48 |
+| langgraph-cli | 0.4.8 / langgraph-api 0.4.48 (EOL — upgrade available to 0.11.x, not urgent) |
 | Docling models | Cached in `~/.cache/huggingface/` (~505 MB) |
-| Dev server | `poetry run langgraph dev --no-browser --allow-blocking` (NOT `poetry run dev` — emoji crash on Windows) |
+| Dev server | `poetry run dev` (emoji fix applied Session 4) or `poetry run langgraph dev --no-browser --allow-blocking` |
 
 ### API keys configured (.env at repo root)
 
@@ -64,8 +56,6 @@ All present: `OPENAI_API_KEY` (sk-proj-, verified live), `EXA_API_KEY` (UUID, ve
 | mid | gpt-4.1-mini | anthropic/claude-haiku-4.5 | — |
 | high | gpt-4.1 | anthropic/claude-sonnet-5 | medium |
 
-OpenRouter IDs verified against openrouter.ai on 2026-07-23.
-
 ### What was verified live
 
 | Test | Provider | Search | Result |
@@ -73,16 +63,30 @@ OpenRouter IDs verified against openrouter.ai on 2026-07-23.
 | Session 2 | OpenAI | Exa | 14 claims, 12 supported, 2 refuted |
 | Session 3 | OpenRouter | Exa | 2 claims, 2 supported |
 | Session 3 | OpenRouter | Tavily | 3 claims, 3 supported |
+| Session 4 | OpenAI | Exa | 448 claims (ukraine paper), ~$10 cost |
 
-NOT yet tested: real academic paper PDF, /claimify skill end-to-end.
+NOT yet tested: `/claimify` skill end-to-end.
 
 ### Key decisions made
 
-1–6: See Session 2 handover (preserved in git history).
-7. **Argument chain verification is Phase 02.**
-8. **config.toml for non-sensitive config** (user-requested, Session 3): `.env` for secrets only, `config.toml` for provider selection, model mappings, search config, reasoning effort. Python `tomllib` (built-in 3.11+). Env vars override via Pydantic.
-9. **Simple call-counter for cost tracking** (Session 3 system-thinking): No class, no generic operations. Langchain wrappers don't expose response metadata. Process-local counters with INFO logging — costs visible in server terminal, not in the client script.
-10. **Academic paper verification needs design discussion** (Session 3, user-raised): Current pipeline verifies against web search. Academic papers need literature-corpus verification. User has PRISMA tools, OpenAlex/Scholar sub-tools, doc-to-RAG pipeline, and Obsidian argument chain vaults. This expands the picture beyond Phase 01's web-search scope and connects to Phase 02's argument chain verification.
+1–10: See Session 3 handover (preserved in git history).
+11. **Phase 01 PDF test is "does the pipeline run?" (Option 1)** — web search verdicts on academic claims are informational, not authoritative. Vault/literature verification is Phase 02+.
+12. **Phase 02 redesigned as "Vault Verification Core"** — replaces old "Argument Chain Verification" concept. Best-case-first strategy: markdown draft with wikilink citations + trusted vault. Phases 03–05 add routing/corpus, deep research commissions, and draft update loop. Edge cases (PDF-only, no vault, missing sources) are backlog items.
+13. **Eight design pillars agreed for Phase 02:** claim record not verdict (multi-attribute), run profiles (light/heavy), resource manifest from day one, vault is trusted, wikilink citations only, cite sets with union semantics, positions from day one, batch vault matching.
+14. **Cost optimization is a first-class concern.** Three principles: evidence summarization before expensive evaluation, triage-based routing for effort, claim-type-aware method selection (own results → vault, not web). See `memory/feedback_cost_optimization.md`.
+
+### Cost analysis (Session 4)
+
+First full academic paper run: ukraine working paper (7,000 words, 20 sections, 448 claims).
+
+| Model | Tier | Requests | Input tokens | Cost |
+|---|---|---|---|---|
+| gpt-4o-mini | low | 1,869 | 2.86M | ~$0.47 |
+| gpt-4.1 | high | 448 | 3.81M | ~$7.70 |
+| gpt-4.1-mini | mid | 4,892 | 3.61M | ~$1.90 |
+| **Total** | | **7,209** | **10.27M** | **~$10.07** |
+
+GPT-4.1 is 76% of cost. Each claim gets up to 5 search iterations accumulating evidence, then one GPT-4.1 evaluation call with all evidence (~8,500 tokens average). Config levers: `max_search_iterations` (5→2–3), `results_per_query` (3→2), evidence truncation budget (120K→20–30K tokens in `utils/llm.py:29`).
 
 ### Test suite
 
@@ -96,16 +100,13 @@ NOT yet tested: real academic paper PDF, /claimify skill end-to-end.
 | test_cost_tracking.py | 12 | Search cost counter, estimates, free-tier balance, print_summary |
 | test_config.py | 7 | TOML loading, sections, fallbacks, real config.toml validation |
 
-### Commit history (Session 3, not yet pushed)
+### Session 4 output files
 
-| Commit | What |
-|--------|------|
-| `0dacdbf` | feat: reasoning effort + cost tracking + dead export cleanup |
-| `365eace` | docs: TASKS and phase plan for Session 3 |
-| `f18b1ca` | docs: reasoning effort future→implemented, fix stale mapping |
-| `7adc896` | refactor: config.toml extraction |
-| `8db7a55` | docs: session 3 wrap |
-| `9008e81` | chore: remove LLM_PROVIDER from .env.example |
+- `workspace/output/MS-DRAFT-working-paper-v4/results.json` (11MB) — full structured claim records
+- `workspace/output/MS-DRAFT-working-paper-v4/report.md` (636KB) — human-readable per-section verdicts
+- `workspace/inbox/MS-DRAFT-working-paper-v4.pdf` — the test input (copy of ukraine paper)
+
+All gitignored via `workspace/` patterns.
 
 ---
 
@@ -115,4 +116,5 @@ NOT yet tested: real academic paper PDF, /claimify skill end-to-end.
 |------|---------------|
 | 2026-07-22 | Session 1: Fork, clone, PM setup, assessment artifact, websearch-and-costs doc |
 | 2026-07-22 | Session 2: Flatten to agent-only, OpenRouter + tier-based registry, PDF ingest (Docling), /claimify skill, NLTK fix, OpenAI live test, tier rebalancing, model selection playbook, Sonnet 5 hybrid-reasoning correction. 63 tests. 13 commits. |
-| 2026-07-23 | Session 3: Reasoning effort fix (REASONING_CONFIG + ChatOpenAI built-in), search cost tracking (call-counter with logging), dead export cleanup, config.toml extraction (.env→secrets only), OpenRouter live test (passed), Exa vs Tavily comparison (both passed), architecture audit (clean), completion review. 87 tests. 4 commits (unpushed). |
+| 2026-07-23 | Session 3: Reasoning effort fix, search cost tracking, dead export cleanup, config.toml extraction, OpenRouter live test, Exa vs Tavily comparison, architecture audit. 87 tests. 7 commits. |
+| 2026-07-23 | Session 4: Emoji fix in dev.py, design discussion on academic verification scope (cited vs citation-free claims, vault structure exploration, doc-rag-backend mapping, cost optimization principles), Phase 02 plan written, first full academic paper PDF test (448 claims, $10 cost with analysis). |

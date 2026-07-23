@@ -92,9 +92,9 @@ End-to-end test on a real paper. Update handover.
 
 ---
 
-## Phase 02 Preview: Argument Chain Verification
+## Phase 02 Preview: Vault Verification Core
 
-**Not started.** Future phase that integrates ClaimeAI with Obsidian vaults containing argument pyramids (from the article-writer-research-of-agents pipeline). Instead of verifying claims against the web, this workflow checks for present and missing links in argument chains and outputs a gap report. An advanced version lets the user indicate what to do about each gap.
+**Planned — see `phase-02-vault-verification-core.md`.** Session 4 design discussion replaced the original "Argument Chain Verification" concept: Phase 02 now verifies a markdown draft (wikilink citations) against its trusted Obsidian vault — cited-claim alignment plus batch vault matching for citation-free claims — with routing/corpus (03), deep-research commissions (04), and the draft update loop (05) as follow-on phases. Chain-completeness checking of the vault itself moved to the edge-case backlog.
 
 ## Lessons
 
@@ -122,4 +122,6 @@ End-to-end test on a real paper. Update handover.
 
 10. **Separate secrets from config immediately.** `.env` for API keys, `config.toml` for everything else (provider, models, search settings). This paid off within the same session — switching providers for live tests became a one-line edit to a non-sensitive, committed file instead of touching the secrets file. Python 3.11 has `tomllib` built in.
 
-11. **LangGraph dev server processes can be hard to kill on Windows.** The server spawns child processes that persist after the parent is killed. `netstat -ano | findstr ":PORT"` shows the PIDs but they can resist `Stop-Process`. Workaround: start new servers on different ports (2025, 2026) rather than fighting zombie processes.
+11. **First full academic paper costs $10 with default settings.** The ukraine working paper (7,000 words, 20 sections) produced 448 claims — far more than estimated — each getting up to 5 search iterations and a GPT-4.1 evaluation call. GPT-4.1 (high tier) was 76% of total cost ($7.70 of $10.07) despite only 6% of requests (448 of 7,209). Three optimization routes identified: (a) evidence summarization by a cheaper model before high-tier evaluation, (b) triage-based routing so trivial claims get less effort, (c) claim-type routing so novel results go to vault verification not web search. The $10/paper baseline is what Phases 02–03 need to beat. Full breakdown in `memory/project_phase01_cost_analysis.md`.
+
+12. **LangGraph dev server processes can be hard to kill on Windows.** The server spawns child processes that persist after the parent is killed. `netstat -ano | findstr ":PORT"` shows the PIDs but they can resist `Stop-Process`. Workaround: start new servers on different ports (2025, 2026) rather than fighting zombie processes.
