@@ -61,21 +61,21 @@ Tiers: NARROW = targeted test file, no network. MID = full pytest suite. FULL = 
 
 TDD: fixture PDF in `tests/fixtures/`; extraction and chunking are unit-testable offline.
 
-- [ ] 01.4.1 Investigate doc-rag-backend Docling process on Mac (BLOCKED on Windows — fallback: use `docling` or `pymupdf` directly; don't stall the TG on this)
-- [ ] 01.4.2 Determine integration approach: import as dependency, extract as standalone module, or direct library use
-- [ ] 01.4.3a Write failing tests for `ingest/` (PDF → sections with text + metadata) in `tests/test_ingest.py` → NARROW
-- [ ] 01.4.3b Implement `ingest/` module (tests pass) → NARROW
-- [ ] 01.4.4a Write failing tests for section chunking (long text → fact-checker-sized sections) → NARROW
-- [ ] 01.4.4b Implement chunking (tests pass) → NARROW
-- [ ] 01.4.5 Create `workspace/inbox/` and `workspace/output/` directories
-- [ ] 01.4.6 Write `scripts/run_from_pdf.py` — PDF path → extract → fact-check per section → write results → MID
-- [ ] 01.4.7 Test on a real academic paper → FULL
+- [x] 01.4.1 doc-rag-backend investigation superseded — user decided (2026-07-22): use Docling directly; align formats with doc-rag-backend later if the Mac investigation warrants it
+- [x] 01.4.2 Integration approach: direct docling library use, confined to `ingest/pdf.py` (lazy import)
+- [x] 01.4.3a/b `ingest/` implemented TDD: extract_pdf → markdown; 24 tests in `tests/test_ingest.py`
+- [x] 01.4.4a/b Chunking implemented TDD: heading split (H1/H2, code-fence aware), 4000-char cap on paragraph boundaries, <200-char section merging
+- [x] 01.4.5 `workspace/inbox/` + `workspace/output/` with .gitkeep; contents gitignored; workspace/README.md
+- [x] 01.4.6 `scripts/run_from_pdf.py` — argparse CLI, per-section runs.wait against fact_checker, results.json + report.md output, clear server-not-running error. Live invocation untested (no server/keys)
+- [ ] 01.4.7 Test on a real academic paper → FULL — BLOCKED on API keys (same gate as 01.3.5 / TG 01.6)
+
+Session 2 note: docling first-run model download (~505 MB) hung once on a wedged HF CDN connection; killed and re-ran with HF_HUB_OFFLINE=1 against the populated cache (~40s). Models now cached; future runs need no download.
 
 ### TG 01.5: Claimify Skill
 
-- [ ] 01.5.1 Create `.claude/skills/claimify.md` — orchestrates: start LangGraph server, accept file path, extract text, run fact-checker, write results
-- [ ] 01.5.2 Define output format (JSON + Markdown report in workspace/output/)
-- [ ] 01.5.3 Test end-to-end: `/claimify workspace/inbox/paper.pdf`
+- [x] 01.5.1 Skill created at `.claude/skills/claimify/SKILL.md` (directory+SKILL.md is the current Claude Code convention, supersedes the planned flat claimify.md path) — covers input resolution, .env preflight, server start, run command, cost warning, results presentation, failure modes
+- [x] 01.5.2 Output format defined: `workspace/output/<stem>/results.json` + `report.md` (implemented in TG 01.4, documented in skill). `run_from_pdf.py` extended to accept .md/.txt/.markdown input (8 new offline tests; 31 total in test_ingest.py)
+- [ ] 01.5.3 Test end-to-end: `/claimify workspace/inbox/paper.pdf` → FULL — BLOCKED on API keys (same gate as 01.3.5/01.4.7/01.6.1)
 
 ### TG 01.6: Quality & Wrap
 

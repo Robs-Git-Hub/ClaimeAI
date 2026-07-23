@@ -1,16 +1,19 @@
-"""Run the fact-checker pipeline over a PDF, section by section.
+"""Run the fact-checker pipeline over a PDF or text file, section by section.
 
-Extracts the PDF with Docling, chunks it into sections, sends each section
-through the `fact_checker` LangGraph (must be running: `langgraph dev
---no-browser`), and writes results to workspace/output/<pdf-stem>/:
+Accepts a PDF (extracted with Docling) or a plain .md/.markdown/.txt file
+(read directly, no Docling). Either way the content is chunked into
+sections and each section is sent through the `fact_checker` LangGraph
+(must be running: `langgraph dev --no-browser`). Results are written to
+workspace/output/<file-stem>/:
 
     results.json  - structured per-section reports
     report.md     - readable per-section verdict tables + summaries
 
 Usage:
-    poetry run python scripts/run_from_pdf.py [path/to/file.pdf]
+    poetry run python scripts/run_from_pdf.py [path/to/file.pdf|.md|.txt]
 
-With no argument, the newest PDF in workspace/inbox/ is used.
+With no argument, the newest PDF in workspace/inbox/ is used. Supported
+extensions: .pdf, .md, .markdown, .txt (case-insensitive).
 """
 
 from __future__ import annotations
@@ -30,6 +33,43 @@ INBOX_DIR = REPO_ROOT / "workspace" / "inbox"
 OUTPUT_DIR = REPO_ROOT / "workspace" / "output"
 DEFAULT_URL = "http://127.0.0.1:2024"
 ASSISTANT_ID = "fact_checker"
+
+PDF_EXTENSION = ".pdf"
+TEXT_EXTENSIONS = {".md", ".markdown", ".txt"}
+SUPPORTED_EXTENSIONS = {PDF_EXTENSION} | TEXT_EXTENSIONS
+
+
+# ---------------------------------------------------------------------------
+# Input loading (dispatch on file extension; pure/offline for text inputs)
+# ---------------------------------------------------------------------------
+
+
+def load_sections(
+    path: Path, max_chars: int, min_chars: int
+) -> List[Dict[str, str]]:
+    """Load a file and chunk it into fact-checker-ready sections.
+
+    Dispatches on file extension:
+        .pdf                     -> Docling extraction, then chunk_markdown
+        .md / .markdown / .txt   -> read as UTF-8 text, then chunk_markdown
+
+    Raises:
+        ValueError: if the extension is not one of SUPPORTED_EXTENSIONS.
+    """
+    suffix = path.suffix.lower()
+    if suffix == PDF_EXTENSION:
+        from ingest import pdf_to_sections
+
+        return pdf_to_sections(path, max_chars=max_chars, min_chars=min_chars)
+    if suffix in TEXT_EXTENSIONS:
+        from ingest.chunking import chunk_markdown
+
+        text = path.read_text(encoding="utf-8")
+        return chunk_markdown(text, max_chars=max_chars, min_chars=min_chars)
+    raise ValueError(
+        f"Unsupported file type '{suffix or path.name}'. "
+        f"Supported extensions: {', '.join(sorted(SUPPORTED_EXTENSIONS))}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -156,10 +196,14 @@ def _newest_inbox_pdf() -> Path:
 async def run(pdf_path: Path, url: str, max_chars: int, min_chars: int) -> Path:
     from langgraph_sdk import get_client
 
-    from ingest import pdf_to_sections
-
-    print(f"Extracting {pdf_path} (first docling run may download models)...")
-    sections = pdf_to_sections(pdf_path, max_chars=max_chars, min_chars=min_chars)
+    if pdf_path.suffix.lower() == PDF_EXTENSION:
+        print(f"Extracting {pdf_path} (first docling run may download models)...")
+    else:
+        print(f"Reading {pdf_path}...")
+    try:
+        sections = load_sections(pdf_path, max_chars=max_chars, min_chars=min_chars)
+    except ValueError as exc:
+        sys.exit(str(exc))
     if not sections:
         sys.exit(f"No text sections could be extracted from {pdf_path}.")
     print(f"Extracted {len(sections)} section(s).")
@@ -219,14 +263,20 @@ def _die_server_not_running(url: str, exc: Exception) -> None:
 
 def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fact-check a PDF section by section via the fact_checker graph."
+        description=(
+            "Fact-check a PDF or text/markdown file section by section via "
+            "the fact_checker graph."
+        )
     )
     parser.add_argument(
         "pdf",
         nargs="?",
         type=Path,
         default=None,
-        help="Path to a PDF (default: newest PDF in workspace/inbox/)",
+        help=(
+            "Path to a .pdf, .md, .markdown, or .txt file "
+            "(default: newest PDF in workspace/inbox/)"
+        ),
     )
     parser.add_argument(
         "--url",
@@ -253,7 +303,12 @@ def main(argv: Optional[List[str]] = None) -> None:
     pdf_path = args.pdf if args.pdf is not None else _newest_inbox_pdf()
     pdf_path = Path(pdf_path)
     if not pdf_path.is_file():
-        sys.exit(f"PDF not found: {pdf_path}")
+        sys.exit(f"File not found: {pdf_path}")
+    if pdf_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+        sys.exit(
+            f"Unsupported file type '{pdf_path.suffix or pdf_path.name}'. "
+            f"Supported extensions: {', '.join(sorted(SUPPORTED_EXTENSIONS))}"
+        )
     asyncio.run(run(pdf_path, args.url, args.max_chars, args.min_chars))
 
 

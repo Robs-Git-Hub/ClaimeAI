@@ -334,3 +334,104 @@ class TestRenderReportMd:
         md = render_report_md("x.pdf", results)
         assert "a \\| b" in md
         assert "c \\| d" in md
+
+
+# ---------------------------------------------------------------------------
+# scripts/run_from_pdf.py: load_sections() extension dispatch (offline)
+#
+# No network, no docling: only .md/.txt inputs are exercised here, which
+# read the file directly and run chunk_markdown(). The .pdf branch (which
+# imports ingest.pdf_to_sections -> docling) is covered by the slow-marked
+# extract_pdf test above, not here.
+# ---------------------------------------------------------------------------
+
+
+class TestLoadSectionsDispatch:
+    def test_md_file_dispatches_to_text_path_matching_chunk_markdown(self, tmp_path):
+        from scripts.run_from_pdf import load_sections
+
+        content = (
+            "# Doc Title\n\nIntro paragraph.\n\n"
+            "## Section A\n\nText of A.\n\n"
+            "## Section B\n\nText of B.\n"
+        )
+        md_file = tmp_path / "notes.md"
+        md_file.write_text(content, encoding="utf-8")
+
+        sections = load_sections(md_file, max_chars=4000, min_chars=0)
+        expected = chunk_markdown(content, max_chars=4000, min_chars=0)
+        assert sections == expected
+        assert [s["title"] for s in sections] == ["Doc Title", "Section A", "Section B"]
+
+    def test_txt_file_dispatches_to_text_path_matching_chunk_markdown(self, tmp_path):
+        from scripts.run_from_pdf import load_sections
+
+        content = "Just a plain paragraph.\n\nAnd another one.\n"
+        txt_file = tmp_path / "notes.txt"
+        txt_file.write_text(content, encoding="utf-8")
+
+        sections = load_sections(txt_file, max_chars=4000, min_chars=0)
+        expected = chunk_markdown(content, max_chars=4000, min_chars=0)
+        assert sections == expected
+
+    def test_markdown_extension_also_dispatches_to_text_path(self, tmp_path):
+        from scripts.run_from_pdf import load_sections
+
+        content = "## Only Section\n\nSome body text.\n"
+        md_file = tmp_path / "notes.markdown"
+        md_file.write_text(content, encoding="utf-8")
+
+        sections = load_sections(md_file, max_chars=4000, min_chars=0)
+        expected = chunk_markdown(content, max_chars=4000, min_chars=0)
+        assert sections == expected
+
+    def test_extension_dispatch_is_case_insensitive(self, tmp_path):
+        from scripts.run_from_pdf import load_sections
+
+        content = "## Section\n\nBody.\n"
+        md_file = tmp_path / "notes.MD"
+        md_file.write_text(content, encoding="utf-8")
+
+        sections = load_sections(md_file, max_chars=4000, min_chars=0)
+        expected = chunk_markdown(content, max_chars=4000, min_chars=0)
+        assert sections == expected
+
+    def test_unknown_extension_raises_clear_value_error(self, tmp_path):
+        from scripts.run_from_pdf import load_sections
+
+        bad_file = tmp_path / "notes.docx"
+        bad_file.write_text("irrelevant", encoding="utf-8")
+
+        with pytest.raises(ValueError, match=r"[Uu]nsupported file type"):
+            load_sections(bad_file, max_chars=4000, min_chars=0)
+
+    def test_no_extension_raises_clear_value_error(self, tmp_path):
+        from scripts.run_from_pdf import load_sections
+
+        bad_file = tmp_path / "notes"
+        bad_file.write_text("irrelevant", encoding="utf-8")
+
+        with pytest.raises(ValueError, match=r"[Uu]nsupported file type"):
+            load_sections(bad_file, max_chars=4000, min_chars=0)
+
+
+class TestMainExtensionValidation:
+    def test_main_rejects_unsupported_extension_with_clear_error(
+        self, tmp_path, capsys
+    ):
+        from scripts.run_from_pdf import main
+
+        bad_file = tmp_path / "notes.docx"
+        bad_file.write_text("irrelevant", encoding="utf-8")
+
+        with pytest.raises(SystemExit) as excinfo:
+            main([str(bad_file)])
+        assert "Unsupported file type" in str(excinfo.value)
+
+    def test_main_rejects_missing_file_before_touching_network(self, tmp_path):
+        from scripts.run_from_pdf import main
+
+        missing = tmp_path / "does_not_exist.md"
+        with pytest.raises(SystemExit) as excinfo:
+            main([str(missing)])
+        assert "not found" in str(excinfo.value).lower()
