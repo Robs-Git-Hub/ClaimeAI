@@ -71,7 +71,7 @@ TDD: fixture PDF in `tests/fixtures/`; extraction and chunking are unit-testable
 - [x] 01.4.3a/b `ingest/` implemented TDD: extract_pdf → markdown; 24 tests in `tests/test_ingest.py`
 - [x] 01.4.4a/b Chunking implemented TDD: heading split (H1/H2, code-fence aware), 4000-char cap on paragraph boundaries, <200-char section merging
 - [x] 01.4.5 `workspace/inbox/` + `workspace/output/` with .gitkeep; contents gitignored; workspace/README.md
-- [x] 01.4.6 `scripts/run_from_pdf.py` — argparse CLI, per-section runs.wait against fact_checker, results.json + report.md output, clear server-not-running error. Live invocation untested (no server/keys)
+- [x] 01.4.6 `scripts/run_from_pdf.py` — argparse CLI, per-section runs.wait against fact_checker, results.json + report.md output, clear server-not-running error. Live invocation verified in 01.4.7 (Session 4).
 - [x] 01.4.7 Test on a real academic paper → FULL — PASSED (Session 4): ukraine working paper PDF (7,000 words) → 20 sections extracted via Docling, 448 claims verified via OpenAI+Exa. Cost: ~$10 (see Lesson 11 in phase plan). Verdicts: factual/historical claims verify well; novel results correctly get "refuted" (web has no source). Output: `workspace/output/MS-DRAFT-working-paper-v4/`
 
 Session 2 note: docling first-run model download (~505 MB) hung once on a wedged HF CDN connection; killed and re-ran with HF_HUB_OFFLINE=1 against the populated cache (~40s). Models now cached; future runs need no download.

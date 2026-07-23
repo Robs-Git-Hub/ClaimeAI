@@ -1,7 +1,7 @@
 # Session Handover
 
 **Last Updated:** 2026-07-23 (Session 4, outgoing)
-**Current Status:** Phase 01 COMPLETE (one minor item open: `/claimify` skill not tested end-to-end). Phase 02 plan written.
+**Current Status:** Phase 01 IN PROGRESS — one item remaining (01.5.3: `/claimify` skill not tested end-to-end). Phase 02 plan written.
 
 ---
 

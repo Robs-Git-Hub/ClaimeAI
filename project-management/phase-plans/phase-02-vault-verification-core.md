@@ -46,7 +46,7 @@ Serialized vault (frontmatter + key sections) ≈ 100–150K tokens for 421 note
 
 ## Dependencies
 
-- Phase 01 pipeline (complete): claim extraction, `get_llm()` tier registry, config.toml conventions.
+- Phase 01 pipeline (nearly complete — 01.5.3 `/claimify` skill untested): claim extraction, `get_llm()` tier registry, config.toml conventions.
 - `ukraine-vote-analysis` repo cloned as a sibling directory (read-only — this tool must never write to the vault).
 - No new API accounts needed; heavy runs spend LLM credit (batch call + verify passes).
 
