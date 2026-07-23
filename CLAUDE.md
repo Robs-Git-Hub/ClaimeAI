@@ -57,8 +57,9 @@ Text → Sentence Split (NLTK) → Selection (voting) → Disambiguation (voting
 # Install
 poetry install
 
-# Start LangGraph dev server
-langgraph dev --no-browser
+# Start LangGraph dev server (--allow-blocking needed for NLTK's sync tokenizer)
+poetry run dev
+# Or manually: langgraph dev --no-browser --allow-blocking
 
 # Run fact-checker on text
 python scripts/run_fact_checker.py

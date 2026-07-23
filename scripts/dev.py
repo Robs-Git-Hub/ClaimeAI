@@ -31,11 +31,21 @@ def install_langgraph_cli() -> None:
         sys.exit(1)
 
 
+def ensure_nltk_data() -> None:
+    """Pre-download NLTK punkt tokenizer data if missing."""
+    import nltk
+    try:
+        nltk.data.find("tokenizers/punkt_tab")
+    except LookupError:
+        print("📥 Downloading NLTK punkt tokenizer data...")
+        nltk.download("punkt_tab", quiet=True)
+
+
 def start_development_server() -> NoReturn:
     """Start the LangGraph development server with hot reloading."""
     print("🚀 Starting LangGraph development server...")
 
-    dev_command = ["langgraph", "dev", "--no-browser"]
+    dev_command = ["langgraph", "dev", "--no-browser", "--allow-blocking"]
 
     try:
         subprocess.run(dev_command, check=True)
@@ -52,6 +62,7 @@ def main() -> None:
     if not is_langgraph_installed():
         install_langgraph_cli()
 
+    ensure_nltk_data()
     start_development_server()
 
 

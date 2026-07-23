@@ -40,10 +40,12 @@ The pipeline talks to a LangGraph dev server at `http://127.0.0.1:2024`
   (or any lightweight request against that base URL / the langgraph_sdk
   client). A connection error means it's not running.
 - If it's not running, start it as a background task:
-  `poetry run langgraph dev --no-browser`
-  and wait for its startup output (log lines mentioning registering the
-  graph / the server being ready on port 2024) before proceeding. Don't run
-  it in the foreground — it stays up for the whole session.
+  `poetry run dev`
+  (this auto-downloads NLTK punkt data and uses `--allow-blocking` which
+  the synchronous NLTK tokenizer requires). Wait for its startup output
+  (log lines mentioning registering the graph / the server being ready on
+  port 2024) before proceeding. Don't run it in the foreground — it stays
+  up for the whole session.
 
 ## 4. Run the pipeline
 
