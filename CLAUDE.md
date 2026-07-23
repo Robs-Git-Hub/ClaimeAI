@@ -20,8 +20,10 @@ This fork strips the original to the agent backend only (no web frontend, no Chr
 | `claim_verifier/`  | Stage 2 — verify claims via web search               |
 | `fact_checker/`    | Stage 3 — orchestrator, dispatches parallel verification |
 | `utils/`           | Shared utilities (LLM, Redis, settings)              |
+| `ingest/`          | Stage 0 — PDF/text ingestion (Docling), chunking     |
 | `security/`        | API key auth for LangGraph                           |
 | `scripts/`         | CLI dev tools and runners                            |
+| `workspace/`       | Working directory: `inbox/` (inputs), `output/` (results) |
 | `docs/`            | Project documentation                                |
 | `project-management/` | Phase plans and task tracker                      |
 
@@ -37,6 +39,9 @@ This fork strips the original to the agent backend only (no web frontend, no Chr
 - `utils/cost_tracking.py` — search cost counter (process-local, INFO logging)
 - `claim_extractor/llm/config.py` — extraction temperature constants (models live in the registry)
 - `claim_verifier/llm/config.py` — verification temperature constants (models live in the registry)
+- `ingest/pdf.py` — PDF-to-markdown extraction via Docling (lazy import)
+- `ingest/chunking.py` — heading-based text chunking (H1/H2, code-fence aware)
+- `scripts/run_from_pdf.py` — CLI entry point for PDF/text/markdown fact-checking
 - `docs/llm-providers.md` — tier × provider model mapping table
 - `docs/websearch-and-costs.md` — Exa/Tavily and LLM cost estimates
 
@@ -65,7 +70,10 @@ poetry install
 poetry run dev
 # Or manually: langgraph dev --no-browser --allow-blocking
 
-# Run fact-checker on text
+# Run fact-checker on a PDF, markdown, or text file
+python scripts/run_from_pdf.py <path>
+
+# Run fact-checker on inline text (legacy)
 python scripts/run_fact_checker.py
 ```
 

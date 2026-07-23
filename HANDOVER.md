@@ -103,7 +103,7 @@ First full academic paper run: ukraine working paper (7,000 words, 20 sections, 
 
 ### Session 5 vault corrections (sibling repo)
 
-Corrected the ukraine-vote-analysis vault (10 files): ES-11/7 vote tally 98->93 across 9 notes (3 de Carvalho notes with [sic] annotations preserving what the source wrote; 6 downstream notes with corrected figure); "12th ESS"->"11th ESS" in COM-us-shift-qualitative-analysis.md (3 occurrences + rerun warning added). The v2 draft's "98" is left uncorrected as the Phase 02 test-corpus error.
+Corrected the ukraine-vote-analysis vault (9 files): ES-11/7 vote tally 98->93 across 9 notes (3 de Carvalho notes with [sic] annotations preserving what the source wrote; 6 downstream notes with corrected figure); "12th ESS"->"11th ESS" in COM-us-shift-qualitative-analysis.md (3 occurrences + rerun warning added). The v2 draft's "98" is left uncorrected as the Phase 02 test-corpus error.
 
 ---
 
