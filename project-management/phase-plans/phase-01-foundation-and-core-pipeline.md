@@ -119,3 +119,7 @@ End-to-end test on a real paper. Update handover.
 8. **Architecture audit at phase boundary found clean structure.** Dependency direction is correct across all packages (all imports point inward). Zero config duplication, zero model name hardcoding outside the registry. One dead-code finding: `utils/__init__.py` exports 3 checkpointer functions that don't exist — cleanup task added.
 
 9. **Simple call-counter over class-based tracker for cost tracking.** Langchain's Exa/Tavily wrappers don't expose response metadata (usage stats, remaining credits). Cost tracking must be call-count-based with hardcoded per-call estimates. Phase 02 (argument chain verification) doesn't use web search, so this is Phase 01-specific — a class-based `CostTracker` with generic operation types would be YAGNI.
+
+10. **Separate secrets from config immediately.** `.env` for API keys, `config.toml` for everything else (provider, models, search settings). This paid off within the same session — switching providers for live tests became a one-line edit to a non-sensitive, committed file instead of touching the secrets file. Python 3.11 has `tomllib` built in.
+
+11. **LangGraph dev server processes can be hard to kill on Windows.** The server spawns child processes that persist after the parent is killed. `netstat -ano | findstr ":PORT"` shows the PIDs but they can resist `Stop-Process`. Workaround: start new servers on different ports (2025, 2026) rather than fighting zombie processes.

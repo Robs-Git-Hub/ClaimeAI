@@ -27,10 +27,14 @@ This fork strips the original to the agent backend only (no web frontend, no Chr
 
 ### Key Files
 
+- `config.toml` — non-sensitive pipeline config (provider, models, search settings, reasoning effort). Env vars override via Pydantic.
+- `.env` — secrets only (API keys, Redis URI)
 - `langgraph.json` — graph registry for LangGraph CLI
 - `pyproject.toml` — Python dependencies (Poetry)
-- `utils/settings.py` — env var validation (Pydantic), incl. `LLM_PROVIDER` / `OPENROUTER_API_KEY`
-- `utils/models.py` — `get_llm()` factory + `MODEL_REGISTRY` (per-tier model per provider)
+- `utils/config.py` — loads `config.toml` with `tomllib`
+- `utils/settings.py` — env var validation (Pydantic); `llm_provider` default comes from `config.toml`
+- `utils/models.py` — `get_llm()` factory; `MODEL_REGISTRY` and `REASONING_CONFIG` loaded from `config.toml`
+- `utils/cost_tracking.py` — search cost counter (process-local, INFO logging)
 - `claim_extractor/llm/config.py` — extraction temperature constants (models live in the registry)
 - `claim_verifier/llm/config.py` — verification temperature constants (models live in the registry)
 - `docs/llm-providers.md` — tier × provider model mapping table
@@ -73,11 +77,12 @@ EXA_API_KEY=...
 REDIS_URI=redis://localhost:6379
 ```
 
-Optional: `TAVILY_API_KEY`, `LANGSMITH_API_KEY`, `LLM_PROVIDER` (`openai` default | `openrouter`), `OPENROUTER_API_KEY` (`sk-or-...`, required when `LLM_PROVIDER=openrouter`)
+Optional: `TAVILY_API_KEY`, `LANGSMITH_API_KEY`, `OPENROUTER_API_KEY` (`sk-or-...`, required when `llm_provider=openrouter` in config.toml)
 
 ## Conventions
 
 - All LLM calls go through `utils/models.py:get_llm()` — nodes pass a `tier` (`low`, `mid`, `high`) and the registry resolves the model for the active provider (OpenAI via `init_chat_model`, OpenRouter via `ChatOpenAI` against `https://openrouter.ai/api/v1`)
+- Non-sensitive config in `config.toml` (provider, models, search settings); secrets in `.env`; env vars override config.toml
 - Structured output via `llm.with_structured_output(PydanticModel)` everywhere
 - Voting via `utils/llm.py:process_with_voting()` — N completions, M required successes
-- Search provider configured in `claim_verifier/config/nodes.py` (default: `exa`)
+- Search provider configured in `config.toml` `[pipeline]` section (default: `exa`)

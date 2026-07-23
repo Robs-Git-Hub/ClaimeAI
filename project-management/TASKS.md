@@ -55,7 +55,7 @@ Tiers: NARROW = targeted test file, no network. MID = full pytest suite. FULL = 
 - [x] 01.3.3 Dead `MODEL_NAME` constants retired; `MODEL_REGISTRY` (tier × provider) is now the single source of truth; nodes pass tiers (low/mid/high). Refactored from 5 roles to 3 tiers per user request for simpler abstraction.
 - [x] 01.3.4 `evaluate_evidence.py` routed through `high` tier. OpenRouter mapping rebalanced per user review: low=gemma-4-26b-a4b-it, mid=haiku-4.5, high=sonnet-5 (Opus dropped as over-specced). Model selection playbook at `docs/playbook/model-tier-selection.md`.
 - [x] 01.3.5a OpenAI provider live-tested: Apollo 11 paragraph → 14 claims extracted, 12 supported, 2 refuted. Pipeline end-to-end verified.
-- [ ] 01.3.5b OpenRouter provider live test → same gate as 01.6.1b; blocked on 01.3.7
+- [x] 01.3.5b OpenRouter provider live test — passed (Session 3): 2 claims, 2 supported. Full Gemma 4 → Haiku 4.5 → Sonnet 5 (reasoning_effort=medium) chain via Exa search.
 - [x] 01.3.6 Docs: `docs/llm-providers.md` mapping table, CLAUDE.md, `.env.example`, INSTALLATION.md, LLM cost section in websearch-and-costs.md (OpenRouter pricing verified; OpenAI list prices flagged as needing confirmation)
 - [x] 01.3.7a Write tests for reasoning effort parameter on high-tier OpenRouter models (`tests/test_models.py`) → NARROW (5 tests added)
 - [x] 01.3.7b Implement reasoning effort in `_get_openrouter_llm()` — `ChatOpenAI(reasoning_effort=...)` built-in parameter; `REASONING_CONFIG` dict alongside `MODEL_REGISTRY`; high tier gets "medium", low/mid get None
@@ -85,9 +85,9 @@ Session 2 note: docling first-run model download (~505 MB) hung once on a wedged
 ### TG 01.6: Quality & Wrap — IN PROGRESS
 
 - [x] 01.6.1a OpenAI provider live test passed (Apollo 11 paragraph, 14 claims, 12/2 supported/refuted)
-- [ ] 01.6.1b OpenRouter provider live test — set `LLM_PROVIDER=openrouter`, run short fact-check; verify all 3 tiers exercised (Gemma 4 / Haiku 4.5 / Sonnet 5 with reasoning). Blocked on 01.3.7. → FULL (spends API credit)
-- [ ] 01.6.1c Exa vs Tavily comparison — same input, swap `search_provider` in config, compare result quality → FULL (spends API credit)
-- [ ] 01.6.1d Real academic paper PDF test — PDF through `scripts/run_from_pdf.py`, verify structured output → FULL (spends API credit)
+- [x] 01.6.1b OpenRouter provider live test — passed (Session 3): Apollo 11 input → 2 claims, 2 supported. All 3 tiers exercised (Gemma 4 / Haiku 4.5 / Sonnet 5 with reasoning_effort=medium) via Exa.
+- [x] 01.6.1c Exa vs Tavily comparison — passed (Session 3): same input, Exa → 2 claims/2 supported (30KB output), Tavily → 3 claims/3 supported (1.1MB output). Tavily returns much more raw content; both produce correct verdicts.
+- [ ] 01.6.1d Real academic paper PDF test — DEFERRED to Session 4. Requires design discussion first: web search verification works for factual claims but academic papers need literature-corpus verification (see HANDOVER.md).
 - [x] 01.6.1e-a Write tests for search cost counter (`tests/test_cost_tracking.py`): 12 tests covering counting, cost calculation, free-tier balance, reset, print_summary
 - [x] 01.6.1e-b Implement simple call counter in `utils/cost_tracking.py`: process-local counters with INFO logging per search call; `print_summary()` for direct invocation; cross-process limitation documented
 - [x] 01.6.1e-c Add `record_search()` calls in `claim_verifier/nodes/retrieve_evidence.py` after Exa/Tavily searches succeed
@@ -100,6 +100,9 @@ Session 3 completion review fix: Counters are process-local — `record_search()
 
 Cleanup (from Session 3 architecture audit):
 - [x] 01.6.4 Remove dead checkpointer exports from `utils/__init__.py` (`create_checkpointer`, `setup_checkpointer`, `create_checkpointer_sync` removed from `__all__`)
+
+Unplanned (Session 3, user-requested):
+- [x] 01.6.5 Extract non-sensitive config from `.env` to `config.toml` — `utils/config.py` loads TOML; `MODEL_REGISTRY`, `REASONING_CONFIG`, `llm_provider`, `search_provider`, `results_per_query`, `max_search_iterations` all read from config.toml with hardcoded fallbacks. Env vars still override via Pydantic. 7 new tests in `tests/test_config.py`. `LLM_PROVIDER` removed from `.env` and `.env.example`.
 
 Acceptance criteria for TG 01.6:
 - OpenRouter live test produces at least 1 supported or refuted claim on short input

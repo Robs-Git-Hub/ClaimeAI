@@ -1,21 +1,29 @@
 # Session Handover
 
-**Last Updated:** 2026-07-22 (Session 2, outgoing)
-**Current Status:** Phase 01 IN PROGRESS — TG 01.1–01.2 complete; TG 01.3–01.6 have open sub-tasks (all code done, live provider/search tests and cost tracking deferred)
+**Last Updated:** 2026-07-23 (Session 3, outgoing)
+**Current Status:** Phase 01 NEARLY COMPLETE — all code and live provider/search tests done; real academic paper PDF test deferred pending design discussion on verification scope
 
 ---
 
 ## Start Here
 
-**Outgoing session completed:** Flattened repo to agent-only, added OpenRouter provider with tier-based model registry, added Docling PDF ingest + run_from_pdf CLI, created /claimify skill, fixed NLTK blocking, verified OpenAI provider live (14 claims, 12 supported / 2 refuted), rebalanced OpenRouter tier mapping (Gemma/Haiku/Sonnet), created model selection playbook, corrected Sonnet 5 as hybrid-reasoning model (reasoning level needs setting). 63 offline tests, 13 commits (unpushed).
+**Outgoing session completed:** Reasoning effort for Sonnet 5 (REASONING_CONFIG + ChatOpenAI built-in param), search cost tracking module (call-count-based with INFO logging), dead export cleanup, config.toml extraction (secrets in .env, config in config.toml), OpenRouter live test (2 claims, 2 supported via Gemma→Haiku→Sonnet 5), Exa vs Tavily comparison (both produce correct verdicts; Tavily returns ~35× more raw content), architecture audit (clean), completion review with fixes. 87 offline tests, 4 commits (unpushed).
 
 **Incoming session should:**
 
-1. **Live-test OpenRouter provider.** Set `LLM_PROVIDER=openrouter` in `.env`, run a short fact-check (1–2 claim `.txt` file). This tests the full Gemma 4 → Haiku 4.5 → Sonnet 5 tier chain. **Important:** Sonnet 5 is a hybrid-reasoning model — the reasoning effort level needs to be set when constructing the ChatOpenAI client for the high tier (not yet implemented). Re-confirm OpenRouter model IDs haven't changed.
-2. **Live-test Exa vs Tavily.** Swap `search_provider` in `claim_verifier/config/nodes.py` from `"exa"` to `"tavily"`, run the same short test. Compare result quality and speed.
-3. **Add search credit/cost tracking.** Build a module that tracks per-run Exa/Tavily API usage (searches made, estimated cost) and reports remaining free tier balance. Exa: $20 initial + $10/month free. Tavily: 1,000 free credits/month.
-4. **Test on a real academic paper.** Drop a PDF in `workspace/inbox/`, run `/claimify`. This is the Phase 01 milestone gate.
-5. **Push to origin** — 11 commits are local on `main`, nothing pushed yet.
+1. **Push to origin.** 4 commits on `main`, not yet pushed.
+
+2. **Design discussion: verification scope for academic papers.** Before running 01.6.1d (real paper PDF test), the user wants to discuss what "success" looks like. The current pipeline verifies claims against web search — this works for factual claims but academic papers need literature-corpus verification. The user has several routes into the literature corpus that should be considered:
+   - **PRISMA search tools** — systematic review infrastructure (massive undertakings)
+   - **OpenAlex and Google Scholar sub-tools** — simpler academic search
+   - **doc-to-RAG pipeline** — ingest select sets of academic papers into RAGable databases relevant to a claim search
+   - **Obsidian vaults with argument chains** — distilled notes (SOURCE-, QUOTE-, PARA-, CLAIM-, THESIS-) from the literature
+   
+   This is a design question that affects Phase 01 scope (is the PDF test just "does the pipeline run?" or "does it produce useful academic verification?") and Phase 02 planning (argument chain verification was always planned, but the literature search tools expand the picture).
+
+3. **Run the academic paper PDF test** (01.6.1d) once the verification scope is agreed. Drop a PDF in `workspace/inbox/`, start the server, run `poetry run python scripts/run_from_pdf.py <path>`.
+
+4. **Fix the `scripts/dev.py` emoji encoding issue.** The rocket emoji (🚀) in the print statement causes `UnicodeEncodeError` on Windows cp1252. Quick fix: remove the emoji or set `PYTHONIOENCODING=utf-8`. Current workaround: run `poetry run langgraph dev --no-browser --allow-blocking` directly.
 
 **Phase plan:** `project-management/phase-plans/phase-01-foundation-and-core-pipeline.md`
 
@@ -27,67 +35,75 @@
 
 Agent packages at root: `claim_extractor/`, `claim_verifier/`, `fact_checker/`, `utils/`, `security/`, `scripts/`, `ingest/`. No `apps/` directory. `docs/playbook/` for decision rationale.
 
+### Configuration
+
+**`config.toml`** (new in Session 3) — non-sensitive pipeline config. Sections: `[pipeline]` (llm_provider, search_provider, results_per_query, max_search_iterations), `[models.*]` (tier→model mapping per provider), `[reasoning.*]` (reasoning effort per provider/tier). Environment variables override config.toml values via Pydantic.
+
+**`.env`** — secrets only: `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `EXA_API_KEY`, `TAVILY_API_KEY`, `REDIS_URI`/`REDIS_URL`. `LLM_PROVIDER` removed from `.env` — now in `config.toml`.
+
 ### Environment
 
 | Component | Detail |
 |-----------|--------|
 | Python | 3.11.15 via uv (`~\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\python.exe`) |
 | Poetry | 2.4.1 via `uv tool install poetry` |
-| Venv | `C:\vpy\claime-agent-j1KWVyi4-py3.11` (short path for Windows MAX_PATH; `poetry.toml` gitignored) |
-| langgraph-cli | 0.4.8 / langgraph-api 0.4.48 (pinned to match langgraph 0.4.x; EOL warning cosmetic) |
+| Venv | `C:\vpy\claime-agent-j1KWVyi4-py3.11` (short path for Windows MAX_PATH) |
+| langgraph-cli | 0.4.8 / langgraph-api 0.4.48 |
 | Docling models | Cached in `~/.cache/huggingface/` (~505 MB) |
-| NLTK punkt_tab | Downloaded; `scripts/dev.py` auto-downloads if missing |
-| Dev server | Start with `poetry run dev` (handles NLTK data + `--allow-blocking`) |
+| Dev server | `poetry run langgraph dev --no-browser --allow-blocking` (NOT `poetry run dev` — emoji crash on Windows) |
 
 ### API keys configured (.env at repo root)
 
-All present: `OPENAI_API_KEY` (sk-proj-, verified working), `EXA_API_KEY` (UUID, verified working), `OPENROUTER_API_KEY` (sk-or-v1, not yet live-tested), `TAVILY_API_KEY` (tvly-dev-, not yet live-tested), `LLM_PROVIDER=openai`, `REDIS_URI` + `REDIS_URL` (both redis://localhost:6379, Redis optional for local dev).
+All present: `OPENAI_API_KEY` (sk-proj-, verified live), `EXA_API_KEY` (UUID, verified live), `OPENROUTER_API_KEY` (sk-or-v1, verified live), `TAVILY_API_KEY` (tvly-dev-, verified live), `REDIS_URI` + `REDIS_URL` (both redis://localhost:6379, Redis optional for local dev).
 
-### Model tier mapping (current)
+### Model tier mapping (current, from config.toml)
 
-| Tier | OpenAI | OpenRouter | Price (in/out per 1M) |
-|------|--------|------------|----------------------|
-| low | gpt-4o-mini | google/gemma-4-26b-a4b-it | $0.15/$0.60 · $0.06/$0.33 |
-| mid | gpt-4.1-mini | anthropic/claude-haiku-4.5 | $0.40/$1.60 · $1/$5 |
-| high | gpt-4.1 | anthropic/claude-sonnet-5 | $2/$8 · $2/$10 |
+| Tier | OpenAI | OpenRouter | Reasoning |
+|------|--------|------------|-----------|
+| low | gpt-4o-mini | google/gemma-4-26b-a4b-it | — |
+| mid | gpt-4.1-mini | anthropic/claude-haiku-4.5 | — |
+| high | gpt-4.1 | anthropic/claude-sonnet-5 | medium |
 
-Rationale: `docs/playbook/model-tier-selection.md`
+OpenRouter IDs verified against openrouter.ai on 2026-07-23.
 
-### What was verified live (Session 2)
+### What was verified live
 
-- OpenAI provider: Apollo 11 paragraph → 14 claims extracted and verified (12 supported, 2 refuted) via Exa search + GPT-4.1 evidence evaluation.
-- NOT yet tested: OpenRouter provider, Tavily search, PDF ingest end-to-end with real paper.
+| Test | Provider | Search | Result |
+|------|----------|--------|--------|
+| Session 2 | OpenAI | Exa | 14 claims, 12 supported, 2 refuted |
+| Session 3 | OpenRouter | Exa | 2 claims, 2 supported |
+| Session 3 | OpenRouter | Tavily | 3 claims, 3 supported |
+
+NOT yet tested: real academic paper PDF, /claimify skill end-to-end.
 
 ### Key decisions made
 
-1. **Keep OpenAI, add OpenRouter** — not a swap, a second option. Tier-based `MODEL_REGISTRY`.
-2. **PDF ingest via Docling** (user approved despite transitive torch deps).
-3. **Agent README promoted to root** (user approved).
-4. **Tier abstraction** (user requested): nodes call `get_llm(tier="low"/"mid"/"high")`, never model names.
-5. **OpenRouter rebalancing** (user reviewed): Gemma 4 for low (BYOK), Haiku for mid, Sonnet 5 for high. Opus dropped as over-specced.
-6. **Sub-agent model routing** — haiku for exploration/mechanical, sonnet for implementation, top-tier for novel reasoning. Codified in `~/.claude/CLAUDE.md`.
+1–6: See Session 2 handover (preserved in git history).
 7. **Argument chain verification is Phase 02.**
+8. **config.toml for non-sensitive config** (user-requested, Session 3): `.env` for secrets only, `config.toml` for provider selection, model mappings, search config, reasoning effort. Python `tomllib` (built-in 3.11+). Env vars override via Pydantic.
+9. **Simple call-counter for cost tracking** (Session 3 system-thinking): No class, no generic operations. Langchain wrappers don't expose response metadata. Process-local counters with INFO logging — costs visible in server terminal, not in the client script.
+10. **Academic paper verification needs design discussion** (Session 3, user-raised): Current pipeline verifies against web search. Academic papers need literature-corpus verification. User has PRISMA tools, OpenAlex/Scholar sub-tools, doc-to-RAG pipeline, and Obsidian argument chain vaults. This expands the picture beyond Phase 01's web-search scope and connects to Phase 02's argument chain verification.
 
 ### Test suite
 
-63 offline tests (`poetry run pytest -q -m "not slow"`). 1 slow test (docling extraction, ~16s with cached models). All added in Session 2.
+87 offline tests (`poetry run pytest -q -m "not slow"`). 1 slow test (docling extraction, ~16s with cached models).
 
-### Commit history (Session 2, not yet pushed)
+| File | Count | Covers |
+|------|-------|--------|
+| test_models.py | 24 | MODEL_REGISTRY, tier resolution, provider routing, reasoning effort |
+| test_settings.py | 13 | Pydantic settings, env var validation |
+| test_ingest.py | 31 | PDF extraction, chunking, text dispatch, report rendering |
+| test_cost_tracking.py | 12 | Search cost counter, estimates, free-tier balance, print_summary |
+| test_config.py | 7 | TOML loading, sections, fallbacks, real config.toml validation |
+
+### Commit history (Session 3, not yet pushed)
 
 | Commit | What |
 |--------|------|
-| `42e4aae` | docs: update Phase 01 plans from prep findings |
-| `9b3bf9b` | refactor: flatten apps/agent to root (TG 01.2) |
-| `c36f05a` | chore: add docling and pytest deps |
-| `ca24d1e` | feat: OpenRouter integration with MODEL_REGISTRY (TG 01.3) |
-| `7122ec8` | feat: Docling PDF ingest + run_from_pdf CLI (TG 01.4) |
-| `76bdeb0` | chore: .gitattributes for binary files |
-| `cd2b7db` | feat: /claimify skill + md/txt support (TG 01.5) |
-| `bc8cf60` | fix: --allow-blocking + NLTK data pre-download |
-| `eeb26e9` | refactor: simplify MODEL_REGISTRY from 5 roles to 3 tiers |
-| `16f20b2` | refactor: rebalance OpenRouter tiers; add model selection playbook |
-| `cae004e` | docs: session 2 wrap |
-| `d6285c5` | docs: correct Sonnet 5 as hybrid-reasoning model |
+| `0dacdbf` | feat: reasoning effort + cost tracking + dead export cleanup |
+| `365eace` | docs: TASKS and phase plan for Session 3 |
+| `f18b1ca` | docs: reasoning effort future→implemented, fix stale mapping |
+| `7adc896` | refactor: config.toml extraction |
 
 ---
 
@@ -96,4 +112,5 @@ Rationale: `docs/playbook/model-tier-selection.md`
 | Date | What was done |
 |------|---------------|
 | 2026-07-22 | Session 1: Fork, clone, PM setup, assessment artifact, websearch-and-costs doc |
-| 2026-07-22 | Session 2: Flatten to agent-only, OpenRouter + tier-based registry, PDF ingest (Docling), /claimify skill, NLTK fix, OpenAI live test, tier rebalancing (Gemma/Haiku/Sonnet), model selection playbook, Sonnet 5 hybrid-reasoning correction. 63 offline tests. 13 commits (unpushed). |
+| 2026-07-22 | Session 2: Flatten to agent-only, OpenRouter + tier-based registry, PDF ingest (Docling), /claimify skill, NLTK fix, OpenAI live test, tier rebalancing, model selection playbook, Sonnet 5 hybrid-reasoning correction. 63 tests. 13 commits. |
+| 2026-07-23 | Session 3: Reasoning effort fix (REASONING_CONFIG + ChatOpenAI built-in), search cost tracking (call-counter with logging), dead export cleanup, config.toml extraction (.env→secrets only), OpenRouter live test (passed), Exa vs Tavily comparison (both passed), architecture audit (clean), completion review. 87 tests. 4 commits (unpushed). |
