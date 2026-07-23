@@ -41,7 +41,14 @@ This fork strips the original to the agent backend only (no web frontend, no Chr
 - `claim_verifier/llm/config.py` — verification temperature constants (models live in the registry)
 - `ingest/pdf.py` — PDF-to-markdown extraction via Docling (lazy import)
 - `ingest/chunking.py` — heading-based text chunking (H1/H2, code-fence aware)
+- `ingest/draft_types.py` — shared types for draft parsing (WikilinkCitation, ParsedSentence, ParsedDraft)
+- `ingest/draft_parser.py` — wikilink parsing, author-year detection, sentence splitting, `parse_draft()`
+- `ingest/citation_binder.py` — maps pipeline Verdicts to ClaimRecords via `original_index`
+- `ingest/vault_serializer.py` — parses Obsidian vault notes, filters by argument_pyramid/type, serializes to JSON with token counting
+- `utils/claim_record.py` — ClaimRecord (Phase 02–05 data contract), CitationStatus, VaultVerdict, SuggestedAction, DraftPosition, RouteVerdict
+- `utils/run_config.py` — ResourceManifest (declares evidence sources per run), RunProfile (light/heavy)
 - `scripts/run_from_pdf.py` — CLI entry point for PDF/text/markdown fact-checking
+- `docs/playbook/claim-record-design.md` — attribute taxonomy and phase ownership for ClaimRecord
 - `docs/llm-providers.md` — tier × provider model mapping table
 - `docs/websearch-and-costs.md` — Exa/Tavily and LLM cost estimates
 

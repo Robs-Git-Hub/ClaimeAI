@@ -1,23 +1,30 @@
 # Session Handover
 
-**Last Updated:** 2026-07-23 (Session 5, outgoing)
-**Current Status:** Phase 01 COMPLETE. Phase 02 APPROVED — ready for implementation.
+**Last Updated:** 2026-07-23 (Session 6, outgoing)
+**Current Status:** Phase 02 IN PROGRESS — TGs 02.1–02.3 complete, TGs 02.4–02.7 remaining.
 
 ---
 
 ## Start Here
 
-**Outgoing session completed:** Phase 01 closed (01.5.3 `/claimify` skill end-to-end test passed via OpenRouter); Phase 02 plan approved by user; standard dev test file established (`workspace/inbox/ukraine-intro-test.txt`); vault corrections in sibling repo (98->93 vote tally across 9 notes, "12th ESS" -> "11th ESS" in commission brief).
+**Outgoing session completed:** TGs 02.1–02.3 of Phase 02 (data models, draft parsing/citation binding, vault serializer). 107 new tests, all green. No pipeline code was modified — all new files are additive.
 
 **Incoming session should:**
 
-1. **Begin Phase 02 implementation with TG 02.1** — Claim Record, Run Profiles, Resource Manifest. This is the data-model foundation: Pydantic models for the multi-attribute claim record, `light`/`heavy` run profiles, and a per-run resource manifest. See `project-management/phase-plans/phase-02-vault-verification-core.md` for full spec and design pillars.
+1. **Begin TG 02.4 (Cited-Claim Alignment).** This is the first LLM-calling stage: for each cited claim, resolve its SOURCE notes → QUOTE/PARA notes → evaluate whether the quoted material supports the claim. Uses the `high` tier. See `project-management/phase-plans/phase-02-vault-verification-core.md` TG 02.4 for spec.
 
-2. **Use `workspace/inbox/ukraine-intro-test.txt` for dev testing** (user directive). It costs cents per run. Baseline: 15 claims, 10 supported / 5 refuted. The five refuted include pipeline mistakes to fix (decomposition artifact, wrong verdict category) and one genuine paper error the pipeline correctly caught (98 vs 93 votes). Reserve full-paper runs for the TG 02.7 milestone. See memory `phase02-standard-test-file` for detailed characterization.
+2. **Key integration context for TG 02.4:**
+   - `ingest/vault_serializer.py` provides `load_vault()` and `parse_vault_note()` — read vault notes, filter by argument_pyramid/type
+   - `ingest/citation_binder.py` provides `bind_citations()` — maps pipeline Verdicts to ClaimRecords with cite sets
+   - `utils/claim_record.py` has `VaultVerdict` enum (vault_supported, not_supported, etc.) and `RouteVerdict` model for results
+   - Vault frontmatter `type` values differ from file prefixes: SOURCE notes use subtype values (academic-paper, dataset, etc.), QUOTE notes use "quotation". `DEFAULT_EVIDENCE_TYPES` in vault_serializer.py has the correct set.
+   - The vault is at `../ukraine-vote-analysis/vault-main/` (sibling repo, read-only)
 
-3. **Cost optimization is deferred** — the user chose to proceed with Phase 02 rather than tune config.toml settings first. The $10/paper cost for full runs is managed by using the cheap test file during development.
+3. **Use `workspace/inbox/ukraine-intro-test.txt` for dev testing** (user directive). Full-paper runs reserved for TG 02.7 milestone. However, the test file has NO wikilink citations — for TG 02.4 testing, use fixture notes or construct test inputs with wikilinks.
 
-**Phase plan:** `project-management/phase-plans/phase-02-vault-verification-core.md` (status: APPROVED)
+4. **Cost optimization is deferred** — proceed with Phase 02 implementation.
+
+**Phase plan:** `project-management/phase-plans/phase-02-vault-verification-core.md` (status: IN PROGRESS)
 
 ---
 
@@ -69,14 +76,12 @@ All present: `OPENAI_API_KEY` (sk-proj-, **OUT OF CREDIT as of Session 5** — t
 
 ### Key decisions made
 
-1--12: See Session 4 handover (preserved in git history).
-13. **Eight design pillars agreed for Phase 02** — see phase plan. Do not re-litigate.
-14. **Cost optimization is a first-class concern** but deferred in favor of Phase 02 implementation.
-15. **Phase 01 complete, Phase 02 approved** (Session 5). User signed off on the TG 02.1--02.7 breakdown.
-16. **Standard dev test file established** (Session 5): `workspace/inbox/ukraine-intro-test.txt` for all Phase 02 development testing. Full-paper runs reserved for TG 02.7 milestone only.
-17. **OpenAI account out of credit** (Session 5). Use `LLM_PROVIDER=openrouter` env override or top up the account before OpenAI-provider runs.
-18. **De Carvalho (2025) SAIIA article contains a factual error** — states "98 votes" for ES-11/7 (actual: 93). All vault notes corrected with [sic] annotations. The v2 draft's "98" is deliberately left uncorrected as a test-corpus error for Phase 02 vault verification.
-19. **Vault is trusted for Phase 02 dev** (user directive) even though known errors exist — vault verification of relied-upon notes is a future phase.
+1–18: See Session 5 handover (preserved in git history).
+19. **Vault is trusted for Phase 02 dev** (user directive) even though known errors exist.
+20. **ClaimRecord wraps Verdict, doesn't replace it** (Session 6). Verdict already duplicates ValidatedClaim fields; ClaimRecord composes a web_verdict (Optional[Verdict]) plus Phase 02 attributes. Vault verdicts use a separate `VaultVerdict` enum from the web-route `VerificationResult`.
+21. **Vault `type` field values differ from file prefixes** (Session 6). SOURCE notes use subtype values (academic-paper, dataset, policy-paper, web-page, source-dataset, data-source). QUOTE notes use "quotation". `DEFAULT_EVIDENCE_TYPES` in vault_serializer.py encodes the correct set, discovered from the real vault.
+22. **Citation scope is sentence-level only** (Session 6). Conservative heuristic: a citation applies only to the sentence it appears in, never propagated backward to earlier sentences in the paragraph. A wrong "citation-free" beats a wrong binding.
+23. **Sentence splitting replicates the pipeline's exact logic** (Session 6). `ingest/draft_parser.py:split_sentences()` mirrors `claim_extractor/nodes/sentence_splitter.py` lines 59-83 verbatim so `original_index` values match between pre-processing and pipeline output.
 
 ### Cost analysis (Session 4)
 
@@ -91,7 +96,7 @@ First full academic paper run: ukraine working paper (7,000 words, 20 sections, 
 
 ### Test suite
 
-87 offline tests (`poetry run pytest -q -m "not slow"`). 1 slow test (docling extraction, ~16s with cached models).
+195 tests total (192 pass with `-m "not slow"`, 3 slow tests deselected).
 
 | File | Count | Covers |
 |------|-------|--------|
@@ -100,6 +105,25 @@ First full academic paper run: ukraine working paper (7,000 words, 20 sections, 
 | test_ingest.py | 31 | PDF extraction, chunking, text dispatch, report rendering |
 | test_cost_tracking.py | 12 | Search cost counter, estimates, free-tier balance, print_summary |
 | test_config.py | 7 | TOML loading, sections, fallbacks, real config.toml validation |
+| test_claim_record.py | 23 | ClaimRecord, enums, DraftPosition, RouteVerdict, serialization |
+| test_run_config.py | 20 | ResourceManifest, RunProfile, available_routes, vault-less degradation |
+| test_draft_parser.py | 25 | Wikilink parsing, stripping, author-year detection, sentence splitting, ParsedDraft |
+| test_citation_binder.py | 15 | Citation binding via original_index, union semantics, decomposition survival |
+| test_vault_serializer.py | 24 | Vault note parsing, filtering, serialization, token counting (22 narrow + 2 slow live vault) |
+| test_ingest.py (slow) | 1 | Docling PDF extraction (~16s) |
+
+### Phase 02 new files (Session 6)
+
+| File | Purpose |
+|------|---------|
+| `utils/claim_record.py` | ClaimRecord, CitationStatus, VaultVerdict, SuggestedAction, DraftPosition, RouteVerdict |
+| `utils/run_config.py` | ResourceManifest, RunProfile |
+| `docs/playbook/claim-record-design.md` | Attribute taxonomy — which phase populates each field |
+| `ingest/draft_types.py` | Shared types: WikilinkCitation, ParsedSentence, ParsedDraft |
+| `ingest/draft_parser.py` | Wikilink parsing, author-year detection, sentence splitting, parse_draft() |
+| `ingest/citation_binder.py` | bind_citations(verdicts, parsed_draft) → List[ClaimRecord] |
+| `ingest/vault_serializer.py` | VaultNote, SerializedVault, parse_vault_note(), load_vault(), serialize_vault() |
+| `tests/fixtures/vault/` | 6 fixture vault notes for offline testing |
 
 ### Session 5 vault corrections (sibling repo)
 
@@ -115,4 +139,5 @@ Corrected the ukraine-vote-analysis vault (9 files): ES-11/7 vote tally 98->93 a
 | 2026-07-22 | Session 2: Flatten to agent-only, OpenRouter + tier-based registry, PDF ingest (Docling), /claimify skill, NLTK fix, OpenAI live test, tier rebalancing, model selection playbook, Sonnet 5 hybrid-reasoning correction. 63 tests. 13 commits. |
 | 2026-07-23 | Session 3: Reasoning effort fix, search cost tracking, dead export cleanup, config.toml extraction, OpenRouter live test, Exa vs Tavily comparison, architecture audit. 87 tests. 7 commits. |
 | 2026-07-23 | Session 4: Emoji fix in dev.py, design discussion on academic verification scope, Phase 02 plan written, first full academic paper PDF test (448 claims, $10 cost with analysis). |
-| 2026-07-23 | Session 5: Phase 01 closed (01.5.3 /claimify skill e2e test passed via OpenRouter after OpenAI 429). Phase 02 approved. Standard dev test file established. Vault corrections: 98->93 across 9 notes with [sic] on de Carvalho source notes; 12th->11th ESS in commission brief with rerun warning. Completion audit caught 5 doc-sync issues (Phase 01 plan status, stale Phase 02 deps, CLAUDE.md layout/key-files, HANDOVER file count). check-full-completion skill bumped to v1.2.0 (Sonnet routing). 4 commits (ClaimeAI) + 1 commit (ukraine-vote-analysis) + 1 commit (claude-multi-repo-instructions-and-lessons). |
+| 2026-07-23 | Session 5: Phase 01 closed (01.5.3 /claimify skill e2e test passed via OpenRouter after OpenAI 429). Phase 02 approved. Standard dev test file established. Vault corrections: 98->93 across 9 notes with [sic] on de Carvalho source notes; 12th->11th ESS in commission brief with rerun warning. 4 commits. |
+| 2026-07-23 | Session 6: Phase 02 TGs 02.1–02.3 implemented. Data models (ClaimRecord, ResourceManifest, RunProfile), draft parsing + citation binding, vault serializer with live vault validation. 107 new tests (195 total). CLAUDE.md key files updated. |

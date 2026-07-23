@@ -123,23 +123,41 @@ Best case first: markdown draft with wikilink citations + trusted vault. Test co
 
 ### TG 02.1: Claim Record, Run Profiles, Resource Manifest
 
-- [ ] 02.1.1 Claim record Pydantic models (citation status, cite set, position, per-route verdicts + provenance, suggested action; Phase 03 placeholder fields)
-- [ ] 02.1.2 Resource manifest model + loader (vault-less manifest validates and degrades, not errors)
-- [ ] 02.1.3 Run profiles: light (= Phase 01 behavior, regression-tested) / heavy
-- [ ] 02.1.4 Design doc in `docs/playbook/` — attribute taxonomies and which phase populates each
+Design doc first (the Phase 03–05 contract), then TDD for all models. No pipeline code changes — models only.
+New files: `utils/claim_record.py`, `utils/run_config.py`, `tests/test_claim_record.py`, `tests/test_run_config.py`.
+
+- [x] 02.1.1 Design doc: `docs/playbook/claim-record-design.md` — attribute taxonomy (citation status, verdict routes, suggested actions, Phase 03 placeholders), which phase populates each field, verdict types per route
+- [x] 02.1.2a Write tests for claim record models (`tests/test_claim_record.py`): DraftPosition, CitationStatus enum, RouteVerdict, ClaimRecord construction, Phase 03 placeholder fields default to None, round-trip serialization → NARROW (23 tests)
+- [x] 02.1.2b Implement claim record Pydantic models in `utils/claim_record.py`: ClaimRecord wraps Verdict (not replaces), adds citation_status, cite_set, draft position, per-route verdicts with provenance, suggested_action; VaultVerdict enum separate from existing VerificationResult → NARROW (23 pass)
+- [x] 02.1.3a Write tests for resource manifest + run profile (`tests/test_run_config.py`): manifest validation (valid with vault, valid without vault, invalid paths), loader from dict/kwargs, RunProfile enum, profile defaults → NARROW (20 tests)
+- [x] 02.1.3b Implement resource manifest + run profile in `utils/run_config.py`: ResourceManifest (draft_path, optional vault_path, optional corpus_ids, web_enabled flag), RunProfile enum (light/heavy), manifest without vault validates and degrades → NARROW (20 pass)
+- [x] 02.1.4 TG 02.1 complete — regression check: 130 passed, 1 deselected (slow) → MID (`pytest -m "not slow"`)
 
 ### TG 02.2: Draft Ingestion and Citation Binding
 
-- [ ] 02.2.1 Parse wikilinked markdown draft → claims with section + position offsets
-- [ ] 02.2.2 Cite-set binding (union semantics; multi-cite sentences; trailing-cite scope heuristic documented + tested)
-- [ ] 02.2.3 Citation markers survive Claimify decomposition (bind before/alongside; tested)
-- [ ] 02.2.4 Non-wikilink citations flagged `unparsed-citation`, not bound
+Architecture: pre-process draft to extract citations + strip wikilinks → send clean text through unchanged Phase 01 pipeline → re-attach citations to output claims via `original_index`. No pipeline code changes.
+New files: `ingest/draft_types.py` (shared types), `ingest/draft_parser.py` (parsing), `ingest/citation_binder.py` (binding), `tests/test_draft_parser.py`, `tests/test_citation_binder.py`.
+Trailing citation scope heuristic: sentence-level only (conservative — a wrong "citation-free" beats a wrong binding).
+
+- [x] 02.2.0 Shared data types in `ingest/draft_types.py`: WikilinkCitation, ParsedSentence, ParsedDraft
+- [x] 02.2.1a Write tests for draft parser (`tests/test_draft_parser.py`): wikilink regex, strip, sentence splitting, author-year detection, ParsedDraft construction, sentence-index stability, trailing scope → NARROW (25 tests)
+- [x] 02.2.1b Implement draft parser in `ingest/draft_parser.py`: parse_wikilinks(), strip_wikilinks(), detect_author_year(), split_sentences() (replicate pipeline NLTK logic), parse_draft() → NARROW (25 pass). Smoke-tested against ukraine-intro-test.txt: 9 sentences, "(Zeng 2026)" correctly flagged unparsed_citation.
+- [x] 02.2.2a Write tests for citation binder (`tests/test_citation_binder.py`): single claim binding, multi-cite union semantics, citation-free claims, decomposed claims sharing original_index, trailing scope (sentence-only), DraftPosition populated, unparsed-citation status, out-of-range graceful handling → NARROW (15 tests)
+- [x] 02.2.2b Implement citation binder in `ingest/citation_binder.py`: bind_citations(verdicts, parsed_draft) → List[ClaimRecord] → NARROW (15 pass)
+- [x] 02.2.3 Sentence-index stability test included in test_draft_parser.py (test_sentence_index_stability) → NARROW
+- [x] 02.2.4 TG 02.2 complete — regression check: 170 passed, 1 deselected (slow) → MID
 
 ### TG 02.3: Vault Serializer
 
-- [ ] 02.3.1 Vault → JSON (name, type, frontmatter, key sections, wikilinks); read-only
-- [ ] 02.3.2 Filtering by `argument_pyramid` and note type; token accounting with budget warning
-- [ ] 02.3.3 Graceful degradation on schema drift; validated against real ukraine vault (421 notes)
+New files: `ingest/vault_serializer.py`, `tests/test_vault_serializer.py`.
+Evidence types to include: SOURCE, QUOTE, PARA, CLAIM, THESIS, OBS, RESULT, HYP, INT, EXP.
+Non-evidence types excluded: DESIGN, SEED, FLEET, MOC, MS, EXAMPLE, COM.
+Vault at `../ukraine-vote-analysis/vault-main/v-research/` (448 notes, 116 with argument_pyramid tag).
+
+- [x] 02.3.1a Write tests for vault note parsing + serialization (`tests/test_vault_serializer.py`): frontmatter parsing, body section extraction, wikilink extraction, missing/malformed frontmatter graceful degradation, filtering by argument_pyramid, filtering by note type, token counting, budget warning, serialization output format → NARROW (22 tests). 6 fixture notes in `tests/fixtures/vault/v-research/`.
+- [x] 02.3.1b Implement vault serializer in `ingest/vault_serializer.py`: VaultNote/SerializedVault types, parse_vault_note(), load_vault(), serialize_vault(), DEFAULT_EVIDENCE_TYPES → NARROW (22 pass). Key discovery: vault `type` field values differ from file prefixes (SOURCE→academic-paper/dataset/etc., QUOTE→quotation). `json.dumps(default=str)` handles YAML datetime.date fields.
+- [x] 02.3.2 Live vault validation (2 tests, `@pytest.mark.slow`): 448 notes all parse (1 degrades to type:unknown — malformed YAML in SEED note, expected). argument_pyramid filter → 116 notes. Type counts spot-checked (≥100 SOURCE-subtypes, ≥30 quotation, ≥15 claim, ≥50 hypothesis).
+- [x] 02.3.3 TG 02.3 complete — regression check: 192 passed, 3 deselected (slow) → MID
 
 ### TG 02.4: Cited-Claim Alignment
 

@@ -61,12 +61,14 @@ Serialized vault (frontmatter + key sections) ≈ 100–150K tokens for 421 note
 **Success criteria:**
 - Pydantic models for the claim record (citation status, cite set, draft position, per-route verdicts with provenance, suggested action; placeholder fields for Phase 03 triage attributes).
 - A manifest model + loader (draft path, optional vault path, optional corpus ids, web flag); a manifest without a vault validates and produces a vault-less run plan.
-- A light-profile run on Phase 01's test input produces results equivalent to Phase 01 (regression: existing behavior unchanged).
+- Existing 88 offline tests pass (no pipeline code changes in TG 02.1 — light-profile integration regression is verified when later TGs wire models into the pipeline).
 - Offline tests for models, manifest validation, and profile selection.
 
 **Constraints:**
 - Follow existing conventions: config.toml for defaults, Pydantic settings overrides, no model names outside the registry.
-- Do not break the three existing LangGraph graphs or the 87 existing offline tests.
+- Do not break the three existing LangGraph graphs or the 88 existing offline tests.
+- ClaimRecord wraps `Verdict` (which already duplicates `ValidatedClaim` fields: claim_text, disambiguated_sentence, original_sentence, original_index) — do not flatten or re-duplicate these fields.
+- Vault-specific verdict types (vault-supported, vault-contradicted, not-supported, source-not-in-vault, insufficient-vault-content, no-vault-match) are a separate enum from `VerificationResult` (Supported/Refuted) to keep route-specific semantics clean.
 
 **Context:** The record schema is the contract for Phases 03–05 — a short design doc in `docs/playbook/` recording attribute taxonomies (and which phase populates each) is part of the deliverable.
 
