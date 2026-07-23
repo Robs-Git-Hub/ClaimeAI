@@ -179,3 +179,6 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+
+# machine-local poetry config (short venv path for Windows MAX_PATH)
+poetry.toml
