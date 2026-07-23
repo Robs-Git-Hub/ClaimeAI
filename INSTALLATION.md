@@ -37,13 +37,13 @@ poetry run dev
 
 ## Environment Variables
 
-Edit `.env` with the following:
+Edit `.env` with API keys (secrets only). Non-sensitive settings like provider and model
+selection are in `config.toml` (see `docs/llm-providers.md`).
 
 | Variable | Required | Notes |
 | --- | --- | --- |
 | `OPENAI_API_KEY` | Yes | Must be a project key with the `sk-proj-` prefix |
-| `LLM_PROVIDER` | Optional | `openai` (default) or `openrouter` — selects the LLM provider (see `docs/llm-providers.md`) |
-| `OPENROUTER_API_KEY` | Optional | Required when `LLM_PROVIDER=openrouter`; must start with `sk-or-` |
+| `OPENROUTER_API_KEY` | Optional | Required when `llm_provider = "openrouter"` in `config.toml`; must start with `sk-or-` |
 | `EXA_API_KEY` | Yes | Exa web search ([exa.ai](https://exa.ai/)) — the default search provider |
 | `TAVILY_API_KEY` | Optional | Alternative search provider ([tavily.com](https://tavily.com/)) |
 | `LANGSMITH_API_KEY` | Optional | LangSmith tracing |

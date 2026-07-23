@@ -19,13 +19,13 @@ search API directly.
 
 ## 2. Preflight: environment
 
-Check for a `.env` file at the repo root (do not print the values of any
-key — only whether they are present/non-empty):
+Check `config.toml` at the repo root for `llm_provider` (under `[pipeline]`),
+then check `.env` for the required API keys (do not print key values — only
+whether they are present/non-empty):
 
-- `OPENAI_API_KEY` must be present (starts with `sk-proj-`).
-- `EXA_API_KEY` must be present.
-- If `LLM_PROVIDER=openrouter` is set, `OPENROUTER_API_KEY` must also be
-  present (starts with `sk-or-`).
+- If `llm_provider = "openai"` (default): `OPENAI_API_KEY` must be in `.env` (starts with `sk-proj-`).
+- If `llm_provider = "openrouter"`: `OPENROUTER_API_KEY` must be in `.env` (starts with `sk-or-`).
+- `EXA_API_KEY` must be present (or `TAVILY_API_KEY` if `search_provider = "tavily"` in `config.toml`).
 
 If anything required is missing, stop and tell the user exactly which
 variable(s) to add to `.env` (see `.env.example` for the expected format).

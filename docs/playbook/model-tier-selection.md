@@ -6,7 +6,7 @@ Last updated: 2026-07-23 (Session 3)
 
 ## Design principle
 
-The pipeline uses three tiers (`low`, `mid`, `high`). Nodes request a tier, never a concrete model name. Swapping `LLM_PROVIDER` in `.env` moves the whole pipeline between providers — one config change, no code changes.
+The pipeline uses three tiers (`low`, `mid`, `high`). Nodes request a tier, never a concrete model name. Changing `llm_provider` in `config.toml` moves the whole pipeline between providers — one config change, no code changes.
 
 Tiers are matched **across providers by class and cost band**, not by name. A "low" model on OpenAI should be roughly the same class of model as "low" on OpenRouter — similar capability, similar cost order-of-magnitude, similar speed characteristics.
 

@@ -7,7 +7,7 @@
 
 ## Start Here
 
-**Outgoing session completed:** Reasoning effort for Sonnet 5 (REASONING_CONFIG + ChatOpenAI built-in param), search cost tracking module (call-count-based with INFO logging), dead export cleanup, config.toml extraction (secrets in .env, config in config.toml), OpenRouter live test (2 claims, 2 supported via Gemma→Haiku→Sonnet 5), Exa vs Tavily comparison (both produce correct verdicts; Tavily returns ~35× more raw content), architecture audit (clean), completion review with fixes. 87 offline tests, 4 commits (unpushed).
+**Outgoing session completed:** Reasoning effort for Sonnet 5 (REASONING_CONFIG + ChatOpenAI built-in param), search cost tracking module (call-count-based with INFO logging), dead export cleanup, config.toml extraction (secrets in .env, config in config.toml), OpenRouter live test (2 claims, 2 supported via Gemma→Haiku→Sonnet 5), Exa vs Tavily comparison (both produce correct verdicts; Tavily returns ~35× more raw content), architecture audit (clean), completion review with fixes. 87 offline tests, 7 commits (unpushed).
 
 **Incoming session should:**
 
@@ -104,6 +104,8 @@ NOT yet tested: real academic paper PDF, /claimify skill end-to-end.
 | `365eace` | docs: TASKS and phase plan for Session 3 |
 | `f18b1ca` | docs: reasoning effort future→implemented, fix stale mapping |
 | `7adc896` | refactor: config.toml extraction |
+| `8db7a55` | docs: session 3 wrap |
+| `9008e81` | chore: remove LLM_PROVIDER from .env.example |
 
 ---
 
