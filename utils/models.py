@@ -2,43 +2,32 @@
 
 Provides access to configured language model instances for all modules.
 
-Provider selection is driven by ``LLM_PROVIDER`` (see ``utils/settings.py``):
+Provider selection is driven by ``pipeline.llm_provider`` in
+``config.toml`` (overridable by the ``LLM_PROVIDER`` env var):
 
 - ``openai`` (default) — models are created via ``init_chat_model`` against
   the OpenAI API using ``OPENAI_API_KEY``.
 - ``openrouter`` — models are created via ``ChatOpenAI`` against OpenRouter's
   OpenAI-compatible endpoint using ``OPENROUTER_API_KEY``.
 
-Each pipeline node maps to one of three cost/quality tiers ("low", "mid",
-"high") via ``MODEL_REGISTRY``. Swapping ``LLM_PROVIDER`` in ``.env`` is the
-only thing that should ever need to change to move the whole pipeline between
-providers — nodes only ever ask for a tier, never a concrete model name.
+Model tier mappings and reasoning effort are configured in ``config.toml``
+(sections ``[models.*]`` and ``[reasoning.*]``). Nodes only ever ask for a
+tier, never a concrete model name.
 """
 
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 
+from utils.config import config
 from utils.settings import settings
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
-# Per-tier model registry (single source of truth for model selection).
-#
-# Tiers:
-#   low  — high-volume, cheap calls: claim extractor nodes (selection,
-#          disambiguation, decomposition, validation). Also the default tier
-#          when none is given.
-#   mid  — mid-cost reasoning calls: search query generation and the
-#          search-continue/stop decision.
-#   high — final verdict on a claim (evidence evaluation).
-#          QUALITY GATE: gpt-4.1 is OpenAI's smartest non-reasoning model;
-#          Sonnet 5 is Anthropic's frontier hybrid-reasoning model. Never map
-#          this tier below these — it is the primary quality mechanism.
-#
+# Loaded from config.toml [models.*] sections; hardcoded fallback when
+# config.toml is missing or has no [models] section.
 # Rationale: docs/playbook/model-tier-selection.md
-# OpenRouter IDs verified against openrouter.ai on 2026-07-22.
-MODEL_REGISTRY: dict[str, dict[str, str]] = {
+_DEFAULT_MODELS: dict[str, dict[str, str]] = {
     "openai": {
         "low": "openai:gpt-4o-mini",
         "mid": "openai:gpt-4.1-mini",
@@ -47,22 +36,21 @@ MODEL_REGISTRY: dict[str, dict[str, str]] = {
     "openrouter": {
         "low": "google/gemma-4-26b-a4b-it",
         "mid": "anthropic/claude-haiku-4.5",
-        # Sonnet 5 is Anthropic's frontier hybrid-reasoning model, price-matched
-        # to gpt-4.1 ($2/$10 vs $2/$8). Never downgrade this tier.
         "high": "anthropic/claude-sonnet-5",
     },
 }
 
-# Per-tier reasoning effort configuration.
-# Only models with hybrid-reasoning capability (e.g., Sonnet 5) need this.
-# Values: "low", "medium", "high", or None (no reasoning effort set).
-REASONING_CONFIG: dict[str, dict[str, str | None]] = {
-    "openrouter": {
-        "low": None,
-        "mid": None,
-        "high": "medium",
-    },
+MODEL_REGISTRY: dict[str, dict[str, str]] = config.get("models") or _DEFAULT_MODELS
+
+# Loaded from config.toml [reasoning.*] sections. Missing tiers default
+# to no reasoning effort (handled by .get() returning None).
+_DEFAULT_REASONING: dict[str, dict[str, str]] = {
+    "openrouter": {"high": "medium"},
 }
+
+REASONING_CONFIG: dict[str, dict[str, str]] = (
+    config.get("reasoning") or _DEFAULT_REASONING
+)
 
 
 def resolve_model(tier: str | None = None, provider: str | None = None) -> str:

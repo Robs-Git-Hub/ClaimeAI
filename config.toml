@@ -1,0 +1,29 @@
+# ClaimeAI Pipeline Configuration
+#
+# Non-sensitive settings for the fact-checking pipeline.
+# API keys stay in .env — this file is for configuration
+# choices that are safe to commit.
+#
+# Environment variables override values here (e.g.,
+# LLM_PROVIDER=openrouter overrides pipeline.llm_provider).
+
+[pipeline]
+llm_provider = "openai"         # "openai" or "openrouter"
+search_provider = "exa"         # "exa" or "tavily"
+results_per_query = 3           # search results per query
+max_search_iterations = 5       # max search rounds per claim
+
+[models.openai]
+low = "openai:gpt-4o-mini"
+mid = "openai:gpt-4.1-mini"
+high = "openai:gpt-4.1"
+
+[models.openrouter]
+low = "google/gemma-4-26b-a4b-it"
+mid = "anthropic/claude-haiku-4.5"
+high = "anthropic/claude-sonnet-5"
+
+# Reasoning effort for hybrid-reasoning models.
+# Only specify tiers that need it — missing tiers default to no reasoning.
+[reasoning.openrouter]
+high = "medium"

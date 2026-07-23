@@ -179,9 +179,9 @@ def test_explicit_openai_model_routes_to_openai_even_under_openrouter(
 def test_reasoning_config_comes_from_dict_not_hardcoded():
     # The reasoning effort value must be sourced from REASONING_CONFIG, not
     # hardcoded inline in get_llm/_get_openrouter_llm.
-    assert REASONING_CONFIG["openrouter"]["high"] == "medium"
-    assert REASONING_CONFIG["openrouter"]["low"] is None
-    assert REASONING_CONFIG["openrouter"]["mid"] is None
+    assert REASONING_CONFIG.get("openrouter", {}).get("high") == "medium"
+    assert REASONING_CONFIG.get("openrouter", {}).get("low") is None
+    assert REASONING_CONFIG.get("openrouter", {}).get("mid") is None
 
 
 def test_openrouter_high_tier_gets_reasoning_effort(openrouter_settings):

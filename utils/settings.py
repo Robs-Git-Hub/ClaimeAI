@@ -4,6 +4,8 @@ from uuid import UUID
 from pydantic import AfterValidator, Field, RedisDsn
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from utils.config import config
+
 
 def _validate_openai_api_key(v: str | None) -> str | None:
     """Validate that the OpenAI API key starts with 'sk-proj-'."""
@@ -59,7 +61,10 @@ LLMProvider = Annotated[str, AfterValidator(_validate_llm_provider)]
 class Settings(BaseSettings):
     """Manages application settings and environment variables."""
 
-    llm_provider: LLMProvider = Field(default="openai", alias="LLM_PROVIDER")
+    llm_provider: LLMProvider = Field(
+        default=config.get("pipeline", {}).get("llm_provider", "openai"),
+        alias="LLM_PROVIDER",
+    )
     openai_api_key: OpenAIAPIKey = Field(default=None, alias="OPENAI_API_KEY")
     openrouter_api_key: OpenRouterAPIKey = Field(
         default=None, alias="OPENROUTER_API_KEY"
