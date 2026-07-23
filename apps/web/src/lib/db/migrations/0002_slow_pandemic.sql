@@ -1,1 +1,0 @@
-ALTER TABLE "checks" ADD COLUMN "title" varchar(200);

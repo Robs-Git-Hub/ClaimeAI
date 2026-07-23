@@ -1,1 +1,0 @@
-ALTER TABLE "checks" ADD COLUMN "is_public" varchar(5) DEFAULT 'false' NOT NULL;

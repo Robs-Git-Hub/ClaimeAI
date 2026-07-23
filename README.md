@@ -1,144 +1,136 @@
-# Claime AI
+# ClaimeAI — Fact-Checking Agent 🔍⚙️
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/BharathxD/ClaimeAI)
+A fork of [BharathxD/ClaimeAI](https://github.com/BharathxD/ClaimeAI), stripped to the Python LangGraph agent backend only (no web frontend, no Chrome extension). This fork adds/will add PDF ingestion, OpenRouter support, and a Claude Code `/claimify` skill for CLI-driven fact-checking.
 
-Hey there! I've been working on this fact-checking system for a while, and I'm pretty excited to share it. What we've got here is a comprehensive LangGraph implementation that helps you verify the factual accuracy of text. It'll break down a text into individual claims, check each one against real-world evidence, and then give you a detailed report on what's accurate and what's not.
+This repository contains the implementation of the fact-checking system's core functionality: an automated pipeline that extracts factual claims from text and verifies each one against web evidence. See [INSTALLATION.md](./INSTALLATION.md) for setup instructions. This document focuses on the technical architecture and how the agent workflows are implemented.
 
-![Claime AI](https://cloud.imbharath.com/fc-mas-platform-screenshot.webp)
+![Fact Checker MAS](https://cloud.imbharath.com/fact-checker-mas.png)
 
-The system is split into three main parts (I found this modular approach works way better than a single monolithic system):
+## 🏗️ Technical Architecture
 
-1.  **[Claim Extractor (`claim_extractor/`)](./apps/agent/claim_extractor/README.md)**: Pulls out factual claims from text using the Claimify methodology.
-2.  **[Claim Verifier (`claim_verifier/`)](./apps/agent/claim_verifier/README.md)**: Checks each claim against online evidence through Tavily Search.
-3.  **[Fact Checker (`fact_checker/`)](./apps/agent/fact_checker/README.md)**: Ties everything together and generates the final report.
-
-## 📋 So what's the point of all this?
-
-Let's face it - content from LLMs (or humans!) can sometimes include statements that aren't quite right. I wanted to build a system that could help identify what's factually solid and what might need a second look.
-
-Here's how it works in practice:
-
-1.  You feed in a question and its answer (or any text you want to fact-check).
-2.  The Claim Extractor breaks it down into specific, testable claims. This part was tricky to get right - we needed to handle pronouns, context, and ambiguity. Check out `claim_extractor/README.md` if you're curious about the details.
-3.  The Claim Verifier then takes each claim and tries to verify it. It'll search the web, gather evidence, and decide if the claim is supported, refuted, or if there's just not enough information. There's a lot of nuance here - sometimes the evidence is conflicting!
-4.  Finally, you get a comprehensive report showing which claims held up and which didn't. I've found this breakdown approach much more useful than a simple "true/false" on the entire text.
-
-## 📊 How It All Fits Together
-
-The system runs on LangGraph for orchestrating the workflows. Here's how the pieces connect:
-
-![Claime AI](https://cloud.imbharath.com/agent-mas.png)
-
-It's a bit complex, I know! I spent way too much time getting these interactions right. If you want to understand a specific part better, check out the detailed READMEs:
-
-* **[Claim Extractor README](./apps/agent/claim_extractor/README.md)** - The nitty-gritty on how we extract claims
-* **[Claim Verifier README](./apps/agent/claim_verifier/README.md)** - How we verify claims against real-world evidence
-* **[Fact Checker README](./apps/agent/fact_checker/README.md)** - How we orchestrate everything
-
-## ⚙️ Tweaking Things
-
-Each component has its own configuration options in their `config/` folders. I've spent a lot of time fine-tuning these settings, but you might want to adjust them for your specific needs:
-
-* Temperature settings for LLM calls (how creative vs. deterministic you want things)
-* Number of web search results to collect
-* Retry attempts for ambiguous claims
-* and much more...
-
-The module READMEs have detailed info on what you can customize.
-
-## 📚 A Bit About the Research
-
-The `claim_extractor` is built on the **Claimify** methodology from Metropolitansky & Larson's 2025 paper. It's pretty fascinating stuff - they figured out how to handle ambiguity and extract verifiable claims. I spent a good week just implementing their pipeline, and it was worth it. The full citation and details are in the [`claim_extractor/README.md`](./apps/agent/claim_extractor/README.md).
-
-For the `claim_verifier`, the evidence retrieval approach draws some inspiration from the Search-Augmented Factuality Evaluator (SAFE) methodology in ["Long-form factuality in large language models"](https://arxiv.org/abs/2403.18802) by Wei et al. (2024). Just the basic idea of using search results to verify individual claims.
-
-## ⚠️ A Quick Note on the Implementation
-
-Look, I've tried my best to faithfully implement everything described in the research papers, especially Claimify. But let's be real - there's always room for improvement and I might have missed some minor details along the way. I also took some creative liberties to enhance what was in the papers, adding features like the voting mechanism for disambiguation and the multi-retry approach for verification.
-
-What you're seeing here is my interpretation of these research methods, with some practical additions that I found helpful when implementing in the real world. If you spot something that doesn't align perfectly with the papers, that's probably intentional - I was aiming for a working system that captured the spirit of the research while being practically useful.
-
-The beauty of building on research is that we get to stand on the shoulders of giants AND add our own twist. I believe this implementation represents the core ideas faithfully while adding practical enhancements that make it even more effective.
-
-## 🚀 Development Setup
-   
- For detailed installation instructions, see [INSTALLATION.md](./INSTALLATION.md)
- 
- Quick start:
- ```bash
- git clone https://github.com/bharathxd/agent.git
- cd agent
- pnpm setup:dev
- pnpm dev
- ```
-
-
-## 📂 Repository Structure
+The ClaimeAI is designed as a multi-agent system (MAS) using LangGraph to orchestrate complex workflows. The system is split into three main modules, each with its own specific responsibility:
 
 ```
-claime-ai/
-├── .langgraph_api/       # LangGraph API configuration
-├── apps/
-│   ├── agent/     # Core fact-checking modules
-│   │   ├── claim_extractor/  # Extracts claims from text
-│   │   ├── claim_verifier/   # Verifies extracted claims
-│   │   ├── fact_checker/     # Orchestrates the fact-checking process
-│   │   └── utils/            # Shared utilities
-│   └── web/               # Web interface
-│       ├── public/        # Static assets
-│       └── src/           # Frontend React/Next.js code
-├── packages/              # Shared packages
-└── scripts/               # Utility scripts
+.
+├── claim_extractor/   # Extracts factual claims from text
+├── claim_verifier/    # Verifies claims against evidence
+└── fact_checker/      # Orchestrates the entire workflow
 ```
 
-For detailed documentation on each component, refer to their respective README files:
-* [Claim Extractor](./apps/agent/claim_extractor/README.md)
-* [Claim Verifier](./apps/agent/claim_verifier/README.md)
-* [Fact Checker](./apps/agent/fact_checker/README.md)
+## 🤖 Agent Workflows
 
-## 🙏 Thanks to the Giants
+Each module is implemented as a standalone LangGraph agent with its own workflow:
 
-This project wouldn't have been possible without:
+### Claim Extractor Workflow
 
-* Dasha Metropolitansky & Jonathan Larson from Microsoft Research - their Claimify methodology is brilliant
-* Jerry Wei and team at Google DeepMind - their SAFE paper had some useful ideas for evidence retrieval
-* The LangChain team - LangGraph made the complex workflows so much easier
-* OpenAI - for the LLMs that power the text understanding
-* Tavily AI - their search API is perfect for this use case
+The claim extractor implements the Claimify methodology with a 5-stage pipeline:
 
-I've learned a ton working on this project. If you use it or have ideas for improvements, I'd love to hear about it! Contributions are always welcome - whether it's code, suggestions, or even just sharing how you're using it. Let's make this thing even better together.
+```mermaid
+graph LR
+    A[sentence_splitter_node] --> B[selection_node]
+    B --> C[disambiguation_node]
+    C --> D[decomposition_node]
+    D --> E[validation_node]
+```
 
-## 🛣️ Roadmap
+- **Sentence Splitter**: Breaks text into contextual sentences
+- **Selection**: Filters for sentences with factual content
+- **Disambiguation**: Resolves ambiguities like pronouns
+- **Decomposition**: Extracts specific atomic claims
+- **Validation**: Ensures claims are properly formed
 
-Here's what's coming next for the Fact Checker system:
+### Claim Verifier Workflow
 
-- **Add an evaluation agent** - Create a dedicated component to assess the overall performance of the fact-checking process and provide metrics on accuracy and reliability.
-  
-- **Create a public facing API (as a service)** - Develop and deploy a robust API service that allows external applications to leverage the fact-checking capabilities without needing to run the full system locally.
+The claim verifier implements an evidence-based verification process:
 
-## 📝 Contributing
+```mermaid
+graph LR
+    A[generate_search_queries_node] --> B{query_distributor}
+    B -- Queries --> C[retrieve_evidence_node]
+    B -- No Queries --> E[End: Verdict]
+    C --> D[evaluate_evidence_node]
+    D -- Sufficient/Max Retries --> E
+    D -- Insufficient & Retries Left --> A
+```
 
-Contributions are welcome! Here's how you can help:
+- **Query Generation**: Creates search queries for the claim
+- **Evidence Retrieval**: Gathers evidence from web search
+- **Evidence Evaluation**: Assesses if evidence supports/refutes the claim
 
-1. **Fork the repository**
-2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
-3. **Commit your changes**: `git commit -m 'Add some amazing feature'`
-4. **Push to the branch**: `git push origin feature/amazing-feature`
-5. **Open a Pull Request**
+### Fact Checker Orchestrator
 
-Before submitting your PR, please:
-- Make sure your code follows the existing style
-- Add/update tests as necessary
-- Update documentation to reflect your changes
-- Ensure all tests pass
+The main orchestrator ties everything together:
 
-## 📄 License
+```mermaid
+graph LR
+    A[extract_claims] --> B{dispatch_claims_for_verification}
+    B -- Claims to verify --> C[claim_verifier_node]
+    B -- No claims --> E[END]
+    C --> D[generate_report_node]
+    D --> E
+```
 
-This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
+- **Extract Claims**: Calls the claim extractor subsystem
+- **Dispatch Claims**: Fans out for parallel verification
+- **Claim Verifier**: Verifies each claim independently
+- **Generate Report**: Compiles final fact-check report
 
-## 📞 Contact & Support
+## 🔄 Inter-agent Communication
 
-- **Issues**: Please use the [GitHub Issue Tracker](https://github.com/bharathxd/agent/issues) to report bugs or request features
-- **Email**: [bharathxxd@gmail.com](mailto:bharathxxd@gmail.com)
-- **Twitter**: [@Bharath_uwu](https://twitter.com/bharath_uwu)
+The agents communicate through well-defined interfaces:
+
+1. The orchestrator calls the claim extractor with the input text
+2. The extractor returns validated claims
+3. The orchestrator dispatches each claim to the verifier
+4. The verifier returns verdicts for each claim
+5. The orchestrator compiles everything into a final report
+
+## 📦 Module Structure
+
+Each module follows a similar structure:
+
+```
+module/
+├── __init__.py       # Exports key components
+├── agent.py          # LangGraph workflow definition
+├── config/           # Configuration settings
+├── llm/              # LLM utilities
+├── nodes/            # Core node implementations
+└── schemas.py        # Data models
+```
+
+## 🛠️ Implementation Details
+
+- All modules use LangGraph's StateGraph for workflow management
+- Parallel processing is implemented via LangGraph's Send mechanism
+- Each node is implemented as an async function to allow for concurrent operations
+- Configuration settings can be adjusted through the config/ directory in each module
+
+## 🔬 Development
+
+### Setup
+
+See [INSTALLATION.md](./INSTALLATION.md) for full setup instructions. In short: `poetry install`, copy `.env.example` to `.env` and fill in your keys, then start the dev server:
+
+```bash
+langgraph dev --no-browser
+```
+
+You can also run the pipeline directly from the CLI:
+
+```bash
+poetry run python scripts/run_fact_checker.py
+```
+
+### Development and Testing
+
+For development and testing:
+
+1. Start with small test cases that generate 1-2 claims
+2. Use the `astream_events` method to observe the workflow step by step
+3. Configure LLM parameters (temperature, etc.) in the respective config files
+
+For more specific implementation details of each module, check their respective README files:
+- [Claim Extractor README](./claim_extractor/README.md)
+- [Claim Verifier README](./claim_verifier/README.md)
+- [Fact Checker README](./fact_checker/README.md)
