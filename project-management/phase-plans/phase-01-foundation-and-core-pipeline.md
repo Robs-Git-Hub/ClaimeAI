@@ -98,4 +98,14 @@ End-to-end test on a real paper. Update handover.
 
 ## Lessons
 
-(To be populated during execution.)
+### Session 2 (2026-07-22)
+
+1. **NLTK blocks the ASGI event loop.** The sentence tokenizer (punkt) makes a synchronous socket call on first use. `langgraph dev` must run with `--allow-blocking`, and punkt data must be pre-downloaded. Fixed in `scripts/dev.py` — the `poetry run dev` script handles both.
+
+2. **Windows MAX_PATH breaks torch installs.** Poetry's default venv path (`~\AppData\Local\pypoetry\Cache\virtualenvs\...`) exceeds 260 chars when torch unpacks nested third-party licenses. Fix: `poetry config virtualenvs.path C:\vpy --local` (gitignored `poetry.toml`). Permanent fix: enable long paths in registry (`LongPathsEnabled=1`, needs admin).
+
+3. **Docling model downloads can wedge.** First-run HuggingFace model download (~505 MB) hung on a half-open CDN connection. Recovery: kill the process, retry with `HF_HUB_OFFLINE=1` against the populated cache. Once cached, extraction runs in ~16s.
+
+4. **Model tier abstraction is worth doing early.** The original role-based registry (5 roles × 2 providers) was confusing — multiple roles mapped to the same model, making cross-provider comparison hard. Refactoring to 3 tiers (low/mid/high) simplified the registry, made costs comparable at a glance, and let the user immediately spot that the OpenRouter tiers were over-specced. Record rationale in a playbook doc, not just code comments.
+
+5. **Prep import/path analysis saved significant time.** The flatten (TG 01.2, 199 files changed) completed with zero import rewrites because prep confirmed all imports were absolute top-level package names with no sys.path hacks. Without that confidence the flatten would have required iterative testing after each batch of moves.

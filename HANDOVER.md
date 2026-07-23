@@ -1,20 +1,21 @@
 # Session Handover
 
-**Last Updated:** 2026-07-22 (Session 2)
-**Current Status:** Phase 01 IN PROGRESS — TG 01.1–01.5 complete; TG 01.6 partially complete (OpenAI live test passed; OpenRouter live test and real-paper test remain)
+**Last Updated:** 2026-07-22 (Session 2, outgoing)
+**Current Status:** Phase 01 IN PROGRESS — TG 01.1–01.5 complete; TG 01.6 partially complete
 
 ---
 
 ## Start Here
 
-**Session 2 completed:** Flattened repo to agent-only (TG 01.2), added OpenRouter as second LLM provider with per-role model registry (TG 01.3), added Docling PDF ingest module + run_from_pdf CLI (TG 01.4), created /claimify Claude Code skill (TG 01.5). Fixed NLTK blocking issue in dev server. Verified live: OpenAI provider, 14 claims extracted and verified from Apollo 11 paragraph.
+**Outgoing session completed:** Flattened repo to agent-only, added OpenRouter provider with tier-based model registry, added Docling PDF ingest + run_from_pdf CLI, created /claimify skill, fixed NLTK blocking, verified OpenAI provider live (14 claims, 12 supported / 2 refuted), rebalanced OpenRouter tier mapping (Gemma/Haiku/Sonnet), created model selection playbook. 63 offline tests, 11 commits (unpushed).
 
 **Incoming session should:**
 
-1. **Test OpenRouter provider live** (task 01.3.5). Set `LLM_PROVIDER=openrouter` in .env, run a short fact-check. Re-confirm model IDs match what OpenRouter currently serves (verified 2026-07-22: `anthropic/claude-haiku-4.5`, `anthropic/claude-sonnet-5`, `anthropic/claude-opus-4.8`).
-2. **Test on a real academic paper** (task 01.4.7 / 01.6.1). Drop a PDF in `workspace/inbox/` and run `/claimify`.
-3. **Push to origin** (task 01.6.3). All commits are local; nothing has been pushed yet this session.
-4. **Phase 02 design** if Phase 01 is closed — argument chain verification (integrates with Obsidian vault argument pyramids from article-writer-research-of-agents).
+1. **Live-test OpenRouter provider.** Set `LLM_PROVIDER=openrouter` in `.env`, run a short fact-check (1–2 claim `.txt` file). This tests the full Gemma 4 → Haiku 4.5 → Sonnet 5 tier chain. Re-confirm OpenRouter model IDs haven't changed.
+2. **Live-test Exa vs Tavily.** Swap `search_provider` in `claim_verifier/config/nodes.py` from `"exa"` to `"tavily"`, run the same short test. Compare result quality and speed.
+3. **Add search credit/cost tracking.** Build a module that tracks per-run Exa/Tavily API usage (searches made, estimated cost) and reports remaining free tier balance. Exa: $20 initial + $10/month free. Tavily: 1,000 free credits/month.
+4. **Test on a real academic paper.** Drop a PDF in `workspace/inbox/`, run `/claimify`. This is the Phase 01 milestone gate.
+5. **Push to origin** — 11 commits are local on `main`, nothing pushed yet.
 
 **Phase plan:** `project-management/phase-plans/phase-01-foundation-and-core-pipeline.md`
 
@@ -24,48 +25,52 @@
 
 ### Repo structure (post-flatten)
 
-Agent packages are at root: `claim_extractor/`, `claim_verifier/`, `fact_checker/`, `utils/`, `security/`, `scripts/`, `ingest/`. No more `apps/` directory, no web frontend, no Chrome extension.
+Agent packages at root: `claim_extractor/`, `claim_verifier/`, `fact_checker/`, `utils/`, `security/`, `scripts/`, `ingest/`. No `apps/` directory. `docs/playbook/` for decision rationale.
 
 ### Environment
 
-- **Python:** 3.11.15 via uv (`C:\Users\rj_co\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\python.exe`)
-- **Poetry:** 2.4.1 via `uv tool install poetry`
-- **Venv:** `C:\vpy\claime-agent-j1KWVyi4-py3.11` (short path to dodge Windows MAX_PATH — long paths disabled, no admin). Configured via repo-local `poetry.toml` (gitignored).
-- **langgraph-cli:** 0.4.8 / langgraph-api 0.4.48 pinned in venv (matches langgraph 0.4.x project pins; EOL warning is cosmetic)
-- **Docling models:** cached in `~/.cache/huggingface/` (~505 MB, first-run download completed in Session 2)
-- **NLTK punkt_tab:** downloaded; `scripts/dev.py` auto-downloads if missing
-- **Dev server:** must start with `poetry run dev` (or `langgraph dev --no-browser --allow-blocking`) — NLTK's synchronous tokenizer requires `--allow-blocking`
-- **.env:** OPENAI_API_KEY, EXA_API_KEY, OPENROUTER_API_KEY, TAVILY_API_KEY, LLM_PROVIDER=openai, REDIS_URI, REDIS_URL all set
+| Component | Detail |
+|-----------|--------|
+| Python | 3.11.15 via uv (`~\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\python.exe`) |
+| Poetry | 2.4.1 via `uv tool install poetry` |
+| Venv | `C:\vpy\claime-agent-j1KWVyi4-py3.11` (short path for Windows MAX_PATH; `poetry.toml` gitignored) |
+| langgraph-cli | 0.4.8 / langgraph-api 0.4.48 (pinned to match langgraph 0.4.x; EOL warning cosmetic) |
+| Docling models | Cached in `~/.cache/huggingface/` (~505 MB) |
+| NLTK punkt_tab | Downloaded; `scripts/dev.py` auto-downloads if missing |
+| Dev server | Start with `poetry run dev` (handles NLTK data + `--allow-blocking`) |
 
-### API keys configured
+### API keys configured (.env at repo root)
 
-- `OPENAI_API_KEY` — `sk-proj-` prefix, verified working
-- `EXA_API_KEY` — UUID format, verified working
-- `OPENROUTER_API_KEY` — `sk-or-v1` prefix, not yet live-tested
-- `TAVILY_API_KEY` — `tvly-dev-` prefix, not yet live-tested
-- `REDIS_URI` / `REDIS_URL` — both set to `redis://localhost:6379` (Redis optional for local dev)
+All present: `OPENAI_API_KEY` (sk-proj-, verified working), `EXA_API_KEY` (UUID, verified working), `OPENROUTER_API_KEY` (sk-or-v1, not yet live-tested), `TAVILY_API_KEY` (tvly-dev-, not yet live-tested), `LLM_PROVIDER=openai`, `REDIS_URI` + `REDIS_URL` (both redis://localhost:6379, Redis optional for local dev).
+
+### Model tier mapping (current)
+
+| Tier | OpenAI | OpenRouter | Price (in/out per 1M) |
+|------|--------|------------|----------------------|
+| low | gpt-4o-mini | google/gemma-4-26b-a4b-it | $0.15/$0.60 · $0.06/$0.33 |
+| mid | gpt-4.1-mini | anthropic/claude-haiku-4.5 | $0.40/$1.60 · $1/$5 |
+| high | gpt-4.1 | anthropic/claude-sonnet-5 | $2/$8 · $2/$10 |
+
+Rationale: `docs/playbook/model-tier-selection.md`
 
 ### What was verified live (Session 2)
 
-- OpenAI provider: Apollo 11 paragraph → 14 claims extracted and verified (12 supported, 2 refuted) via Exa search + GPT-4.1 evidence evaluation. Pipeline takes ~2–3 minutes for a short paragraph.
+- OpenAI provider: Apollo 11 paragraph → 14 claims extracted and verified (12 supported, 2 refuted) via Exa search + GPT-4.1 evidence evaluation.
+- NOT yet tested: OpenRouter provider, Tavily search, PDF ingest end-to-end with real paper.
 
 ### Key decisions made
 
-1. **Keep OpenAI, add OpenRouter** — not a swap, a second option. Per-role MODEL_REGISTRY in `utils/models.py`.
-2. **PDF ingest via Docling** (user approved despite transitive torch deps — they're used deps of a real feature). Doc-rag-backend investigation deferred.
-3. **Agent README promoted to root** (user approved). INSTALLATION.md rewritten agent-only.
-4. **Argument chain verification is Phase 02** — integrates with Obsidian vault argument pyramids from article-writer-research-of-agents.
-5. **Sub-agent model routing** — haiku for exploration/mechanical, sonnet for implementation, top-tier for novel reasoning only. Codified in `~/.claude/CLAUDE.md`.
-
-### Related repos
-
-- **doc-rag-backend** — Docling PDF extraction (Mac only, not cloned on Windows)
-- **article-writer-research-of-agents** — argument pyramid pipeline (Phase 02 integration point)
-- **control-hub-building** — REPO note at `REPO-ClaimeAI.md`
+1. **Keep OpenAI, add OpenRouter** — not a swap, a second option. Tier-based `MODEL_REGISTRY`.
+2. **PDF ingest via Docling** (user approved despite transitive torch deps).
+3. **Agent README promoted to root** (user approved).
+4. **Tier abstraction** (user requested): nodes call `get_llm(tier="low"/"mid"/"high")`, never model names.
+5. **OpenRouter rebalancing** (user reviewed): Gemma 4 for low (BYOK), Haiku for mid, Sonnet 5 for high. Opus dropped as over-specced.
+6. **Sub-agent model routing** — haiku for exploration/mechanical, sonnet for implementation, top-tier for novel reasoning. Codified in `~/.claude/CLAUDE.md`.
+7. **Argument chain verification is Phase 02.**
 
 ### Test suite
 
-63 offline tests passing (pytest, `poetry run pytest -q -m "not slow"`). 1 slow test (docling extraction with cached models, ~16s). No tests existed upstream — all added in Session 2.
+63 offline tests (`poetry run pytest -q -m "not slow"`). 1 slow test (docling extraction, ~16s with cached models). All added in Session 2.
 
 ### Commit history (Session 2, not yet pushed)
 
@@ -79,12 +84,15 @@ Agent packages are at root: `claim_extractor/`, `claim_verifier/`, `fact_checker
 | `76bdeb0` | chore: .gitattributes for binary files |
 | `cd2b7db` | feat: /claimify skill + md/txt support (TG 01.5) |
 | `bc8cf60` | fix: --allow-blocking + NLTK data pre-download |
+| `eeb26e9` | refactor: simplify MODEL_REGISTRY from 5 roles to 3 tiers |
+| `16f20b2` | refactor: rebalance OpenRouter tiers; add model selection playbook |
+| (pending) | docs: session 2 wrap |
 
 ---
 
 ## Recent Sessions
 
-| Date       | What was done |
-|------------|---------------|
+| Date | What was done |
+|------|---------------|
 | 2026-07-22 | Session 1: Fork, clone, PM setup, assessment artifact, websearch-and-costs doc |
-| 2026-07-22 | Session 2: Flatten to agent-only (TG 01.2), OpenRouter integration (TG 01.3), PDF ingest (TG 01.4), /claimify skill (TG 01.5), NLTK fix, OpenAI live test passed. 63 offline tests. 8 commits (unpushed). |
+| 2026-07-22 | Session 2: Flatten to agent-only, OpenRouter + tier-based registry, PDF ingest (Docling), /claimify skill, NLTK fix, OpenAI live test, tier rebalancing (Gemma/Haiku/Sonnet), model selection playbook. 63 offline tests. 11 commits (unpushed). |

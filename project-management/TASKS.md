@@ -52,9 +52,10 @@ Tiers: NARROW = targeted test file, no network. MID = full pytest suite. FULL = 
 - [x] 01.3.1b `LLM_PROVIDER` (case-insensitive, validated) + `OPENROUTER_API_KEY` (`sk-or-` prefix) in `utils/settings.py`
 - [x] 01.3.2a Failing tests for `get_llm()` provider branching written first (19 tests, no network)
 - [x] 01.3.2b OpenRouter branch in `utils/models.py` (ChatOpenAI vs openrouter.ai/api/v1; temperature honored both paths incl. voting 0.2 rule)
-- [x] 01.3.3 Dead `MODEL_NAME` constants retired; `MODEL_REGISTRY` (role × provider) is now the single source of truth; nodes pass roles. Note: query_generation/search_decision now genuinely run gpt-4.1-mini on openai (previously silently ran the gpt-4o-mini default) — matches documented intent, pre-approved
-- [x] 01.3.4 `evaluate_evidence.py` routed through `evidence_evaluation` role; Opus-tier floor commented in registry. OpenRouter IDs verified live 2026-07-22: claude-haiku-4.5 / claude-sonnet-5 / claude-opus-4.8
-- [ ] 01.3.5 Live test both providers with a 1–2 claim input → FULL — BLOCKED: needs OPENROUTER_API_KEY + OPENAI_API_KEY in .env (no keys in this environment); re-confirm OpenRouter model IDs at first paid run
+- [x] 01.3.3 Dead `MODEL_NAME` constants retired; `MODEL_REGISTRY` (tier × provider) is now the single source of truth; nodes pass tiers (low/mid/high). Refactored from 5 roles to 3 tiers per user request for simpler abstraction.
+- [x] 01.3.4 `evaluate_evidence.py` routed through `high` tier. OpenRouter mapping rebalanced per user review: low=gemma-4-26b-a4b-it, mid=haiku-4.5, high=sonnet-5 (Opus dropped as over-specced). Model selection playbook at `docs/playbook/model-tier-selection.md`.
+- [x] 01.3.5a OpenAI provider live-tested: Apollo 11 paragraph → 14 claims extracted, 12 supported, 2 refuted. Pipeline end-to-end verified.
+- [ ] 01.3.5b OpenRouter provider live test → DEFERRED to next session (keys are configured; user chose to defer)
 - [x] 01.3.6 Docs: `docs/llm-providers.md` mapping table, CLAUDE.md, `.env.example`, INSTALLATION.md, LLM cost section in websearch-and-costs.md (OpenRouter pricing verified; OpenAI list prices flagged as needing confirmation)
 
 ### TG 01.4: PDF Ingest
@@ -77,11 +78,15 @@ Session 2 note: docling first-run model download (~505 MB) hung once on a wedged
 - [x] 01.5.2 Output format defined: `workspace/output/<stem>/results.json` + `report.md` (implemented in TG 01.4, documented in skill). `run_from_pdf.py` extended to accept .md/.txt/.markdown input (8 new offline tests; 31 total in test_ingest.py)
 - [ ] 01.5.3 Test end-to-end: `/claimify workspace/inbox/paper.pdf` → FULL — BLOCKED on API keys (same gate as 01.3.5/01.4.7/01.6.1)
 
-### TG 01.6: Quality & Wrap
+### TG 01.6: Quality & Wrap — IN PROGRESS
 
-- [ ] 01.6.1 Verify full pipeline works end-to-end (PDF → claims → verdicts → report) → FULL (one clean run on a real paper is the milestone gate; use a short 1–2 claim input for any debugging iterations to protect API quota)
-- [ ] 01.6.2 Update HANDOVER.md
-- [ ] 01.6.3 Commit and push to origin
+- [x] 01.6.1a OpenAI provider live test passed (Apollo 11 paragraph, 14 claims, 12/2 supported/refuted)
+- [ ] 01.6.1b OpenRouter provider live test → DEFERRED to next session
+- [ ] 01.6.1c Exa vs Tavily comparison test → DEFERRED to next session
+- [ ] 01.6.1d Real academic paper PDF test → DEFERRED to next session
+- [ ] 01.6.1e Add search credit/cost tracking for Exa and Tavily → DEFERRED to next session
+- [x] 01.6.2 Update HANDOVER.md
+- [ ] 01.6.3 Push to origin — user to confirm
 
 ---
 
