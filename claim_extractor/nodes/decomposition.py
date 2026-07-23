@@ -48,7 +48,7 @@ async def _decomposition_stage(
     logger.debug(f"Processing decomposition for: '{sentence}'")
 
     # Get zero-temp LLM for consistent results
-    llm = get_llm(completions=COMPLETIONS)
+    llm = get_llm(role="extraction", completions=COMPLETIONS)
 
     # Get context without following sentences
     original_context = (

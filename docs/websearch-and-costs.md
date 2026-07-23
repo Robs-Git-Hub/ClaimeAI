@@ -23,3 +23,17 @@ ClaimeAI can make between one and five searches for each claim, depending on whe
 Exa currently charges **$7 per 1,000 standard searches** and provides $20 of initial credit followed by $10 of free monthly credit. Tavily charges **$0.008 per credit** on pay-as-you-go pricing; basic searches consume one credit and advanced searches consume two. Tavily also provides 1,000 free credits per month.
 
 These are upper and lower estimates rather than fixed document costs. A claim resolved by the first search costs substantially less than one that uses all five permitted iterations.
+
+## LLM costs
+
+LLM usage is driven by the per-role model mapping in `docs/llm-providers.md`. Approximate list prices per million tokens (input / output) for the three main roles:
+
+| Role | OpenAI model | ~$/M in/out | OpenRouter model | ~$/M in/out |
+| --- | --- | --- | --- | --- |
+| Extraction | `gpt-4o-mini` | $0.15 / $0.60 | `anthropic/claude-haiku-4.5` | $1 / $5 |
+| Query generation / search decision | `gpt-4.1-mini` | $0.40 / $1.60 | `anthropic/claude-sonnet-5` | $2 / $10 (intro; $3 / $15 standard) |
+| Evidence evaluation | `gpt-4.1` | $2 / $8 | `anthropic/claude-opus-4.8` | $5 / $25 |
+
+Rough order of magnitude per document: extraction makes 3 voting completions per sentence for two stages plus decomposition/validation on small prompts (typically cents), while evidence evaluation runs once per claim over up to ~15 retrieved snippets — this is the dominant LLM cost. Expect the OpenRouter (Claude) configuration to cost roughly 3–7× the OpenAI configuration per document at list prices.
+
+> Anthropic prices above were checked against openrouter.ai on 2026-07-22; OpenAI prices are approximate recollections of list pricing and **need confirmation against openai.com/pricing** before budgeting.

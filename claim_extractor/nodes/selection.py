@@ -125,7 +125,7 @@ async def selection_node(state: State) -> Dict[str, List[SelectedContent]]:
         return {}
 
     # Get LLM with temperature 0.2 since we're using multiple completions
-    llm = get_llm(completions=COMPLETIONS)
+    llm = get_llm(role="extraction", completions=COMPLETIONS)
 
     # Process all sentences with voting
     selected_contents = await process_with_voting(

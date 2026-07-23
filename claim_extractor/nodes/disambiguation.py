@@ -126,7 +126,7 @@ async def disambiguation_node(state: State) -> Dict[str, List[DisambiguatedConte
         return {}
 
     # Get LLM with temperature 0.2 for multiple completions
-    llm = get_llm(completions=COMPLETIONS)
+    llm = get_llm(role="extraction", completions=COMPLETIONS)
 
     # Process all selected contents with voting
     disambiguated_contents = await process_with_voting(

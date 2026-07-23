@@ -1,10 +1,10 @@
 """LLM configuration constants.
 
 Central settings for language model behavior.
-"""
 
-# Model selection
-MODEL_NAME = "openai:gpt-4o-mini"
+Model selection lives in the per-role registry in ``utils/models.py``
+(MODEL_REGISTRY); extractor nodes request ``role="extraction"``.
+"""
 
 # Temperature settings
 DEFAULT_TEMPERATURE = 0.0  # Use for exact, consistent outputs

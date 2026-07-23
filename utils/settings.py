@@ -29,15 +29,41 @@ def _validate_tavily_api_key(v: str | None) -> str | None:
     return v
 
 
+def _validate_openrouter_api_key(v: str | None) -> str | None:
+    """Validate that the OpenRouter API key starts with 'sk-or-'."""
+    if v and not v.startswith("sk-or-"):
+        raise ValueError("OpenRouter API key must start with 'sk-or-'")
+    return v
+
+
+_ALLOWED_LLM_PROVIDERS = ("openai", "openrouter")
+
+
+def _validate_llm_provider(v: str) -> str:
+    """Normalize and validate the LLM provider selection."""
+    normalized = v.strip().lower()
+    if normalized not in _ALLOWED_LLM_PROVIDERS:
+        raise ValueError(
+            f"LLM_PROVIDER must be one of {_ALLOWED_LLM_PROVIDERS}, got '{v}'"
+        )
+    return normalized
+
+
 OpenAIAPIKey = Annotated[str | None, AfterValidator(_validate_openai_api_key)]
 ExaAPIKey = Annotated[str | None, AfterValidator(_validate_exa_api_key)]
 TavilyAPIKey = Annotated[str | None, AfterValidator(_validate_tavily_api_key)]
+OpenRouterAPIKey = Annotated[str | None, AfterValidator(_validate_openrouter_api_key)]
+LLMProvider = Annotated[str, AfterValidator(_validate_llm_provider)]
 
 
 class Settings(BaseSettings):
     """Manages application settings and environment variables."""
 
+    llm_provider: LLMProvider = Field(default="openai", alias="LLM_PROVIDER")
     openai_api_key: OpenAIAPIKey = Field(default=None, alias="OPENAI_API_KEY")
+    openrouter_api_key: OpenRouterAPIKey = Field(
+        default=None, alias="OPENROUTER_API_KEY"
+    )
     exa_api_key: ExaAPIKey = Field(default=None, alias="EXA_API_KEY")
     tavily_api_key: TavilyAPIKey = Field(default=None, alias="TAVILY_API_KEY")
     redis_uri: RedisDsn = Field(default="redis://localhost:6379", alias="REDIS_URL")
