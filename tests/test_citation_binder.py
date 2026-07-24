@@ -259,14 +259,14 @@ def test_web_verdict_preserved():
     assert records[0].web_verdict is verdict
 
 
-def test_vault_verdicts_empty_by_default():
+def test_route_verdicts_empty_by_default():
     sentence = make_sentence(0, "Text.")
     draft = make_draft([sentence])
     verdict = make_verdict("Text.", 0)
 
     records = bind_citations([verdict], draft)
 
-    assert records[0].vault_verdicts == []
+    assert records[0].route_verdicts == []
 
 
 def test_suggested_action_none_by_default():

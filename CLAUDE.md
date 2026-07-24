@@ -49,8 +49,12 @@ This fork strips the original to the agent backend only (no web frontend, no Chr
 - `utils/run_config.py` — ResourceManifest (declares evidence sources per run), RunProfile (light/heavy)
 - `ingest/alignment.py` — cited-claim alignment: `gather_evidence()` (one-hop vault traversal) + `evaluate_alignment()` (high-tier LLM evaluation)
 - `ingest/vault_match.py` — citation-free vault matching: `batch_match_claims()` (mid-tier batch proposal) + `verify_matches()` (high-tier adversarial verification)
+- `ingest/triage.py` — batch triage classifier: `triage_claims()` populates `triage_class`, `citation_expectation`, `importance` on all claims in one mid-tier call
+- `ingest/routing.py` — routing policy + route-handler registry: `decide_route()` (pure function, policy table), `execute_routing()` (dispatches to handlers), extensible for Phase 04+
 - `ingest/gap_report.py` — gap report rendering: `assign_suggested_actions()`, `render_gap_report()`, `serialize_results()`
-- `scripts/run_from_pdf.py` — CLI entry point for PDF/text/markdown fact-checking
+- `claim_verifier/evidence_summarization.py` — evidence summarization: `summarize_evidence_for_claim()` condenses raw search results at mid tier before high-tier evaluation
+- `scripts/run_from_pdf.py` — CLI entry point for PDF/text/markdown fact-checking (light profile)
+- `scripts/run_heavy.py` — CLI entry point for heavy-profile runs: draft + vault → parse → extract → bind → vault verify → triage → route → gap report
 - `scripts/spot_check_vault.py` — live spot-check script for alignment + vault matching against real vault
 - `docs/playbook/claim-record-design.md` — attribute taxonomy and phase ownership for ClaimRecord
 - `docs/llm-providers.md` — tier × provider model mapping table
@@ -78,11 +82,29 @@ Draft (markdown with wikilinks) → parse_draft() → bind_citations() → [Clai
   All claims:      → assign_suggested_actions() → render_gap_report()
 ```
 
+### Triage & Routing (Phase 03 — heavy profile, after vault verification)
+
+```
+[ClaimRecords with vault verdicts]
+  → triage_claims (mid tier, one batch call) → [triage_class, citation_expectation, importance]
+  → decide_route (pure function, policy table):
+      vault-resolved (supported/contradicted) → no further routing
+      trivial                                 → skip
+      novel-result / dataset-dependent        → never web (unverifiable until corpus route)
+      general-factual / academic-citable / unclassified → route to web
+  → web route: search → summarize_evidence (mid tier) → evaluate_evidence (high tier)
+  → render_gap_report() with triage, routing decisions, route summary
+```
+
+Full-vault fallback: claims unmatched by the paper-scoped batch pass get one additional high-tier batch call against the full vault (evidence types only, no argument_pyramid filter). Matches from the fallback are flagged as "consider adding argument_pyramid tag" in the gap report.
+
 ### Quality gates
 
 - Selection and disambiguation use 3 LLM completions with 2/3 majority voting. Do not reduce this — it is the primary quality mechanism.
 - Evidence evaluation (web and vault) uses the "high" tier (GPT-4.1 — OpenAI's smartest non-reasoning model, or Claude Sonnet 5 — Anthropic's frontier hybrid-reasoning model with selectable effort levels). Never downgrade this tier. See `docs/playbook/model-tier-selection.md` for rationale.
-- Vault batch matching uses the "mid" tier (cheaper, large-context); each proposed match is re-verified at the "high" tier adversarially.
+- Vault batch matching: pass 1 (paper-scoped) uses "mid" tier; pass 2 (full-vault fallback) uses "high" tier. Each proposed match is re-verified at "high" tier adversarially. Batch-match prompts seek contradictions as well as confirmations.
+- Evidence summarization (mid tier) condenses raw search results before high-tier evaluation, preserving refuting content and URL attribution. Config-switchable (`summarize_evidence` in config.toml, default on).
+- Triage is conservative-up: unclassified claims route to web (never default to trivial); uncertain between never-web and web-verifiable → choose web-verifiable.
 - Up to 5 search iterations per claim if evidence is insufficient (web route only).
 
 ## Running

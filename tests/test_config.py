@@ -63,6 +63,14 @@ def test_reads_search_settings(config_file):
     assert result["pipeline"]["max_search_iterations"] == 3
 
 
+def test_reads_summarize_evidence_flag_override(config_file):
+    """TG 03.4: summarize_evidence is config-switchable (default true,
+    see test_real_config_toml_loads / claim_verifier/config/nodes.py)."""
+    path = config_file("[pipeline]\nsummarize_evidence = false\n")
+    result = _load_config(path)
+    assert result["pipeline"]["summarize_evidence"] is False
+
+
 def test_malformed_toml_raises(config_file):
     path = config_file("this is not [[[valid toml")
     with pytest.raises(tomllib.TOMLDecodeError):
@@ -77,3 +85,5 @@ def test_real_config_toml_loads():
         result = _load_config(config_path)
         assert "pipeline" in result
         assert "models" in result
+        # TG 03.4: summarize_evidence defaults to true in the real config.
+        assert result["pipeline"].get("summarize_evidence", True) is True

@@ -100,7 +100,7 @@ async def main():
         print(f"\n  Claim: {record.web_verdict.claim_text[:80]}...")
         print(f"  Cite set: {record.cite_set}")
         record = await evaluate_alignment(record, filtered_vault, full_vault)
-        for rv in record.vault_verdicts:
+        for rv in record.route_verdicts:
             print(f"    -> [{rv.verdict}] provenance={rv.provenance}")
             if rv.reasoning:
                 print(f"       {rv.reasoning[:120]}")
@@ -124,7 +124,7 @@ async def main():
         print("\n  Stage 2: Verifying matches ...")
         records = await verify_matches(records, proposals, filtered_vault)
         for record in records:
-            for rv in record.vault_verdicts:
+            for rv in record.route_verdicts:
                 if rv.route == "vault_matched":
                     print(f"    [{rv.verdict}] {record.web_verdict.claim_text[:60]}...")
                     print(f"       provenance={rv.provenance}")

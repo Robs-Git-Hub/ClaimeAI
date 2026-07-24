@@ -232,7 +232,7 @@ async def test_evaluate_skips_citation_free():
 
     mock_llm_call.assert_not_called()
     assert result is record
-    assert result.vault_verdicts == []
+    assert result.route_verdicts == []
 
 
 @pytest.mark.asyncio
@@ -248,7 +248,7 @@ async def test_evaluate_skips_empty_cite_set():
 
     mock_llm_call.assert_not_called()
     assert result is record
-    assert result.vault_verdicts == []
+    assert result.route_verdicts == []
 
 
 @pytest.mark.asyncio
@@ -271,8 +271,8 @@ async def test_evaluate_supported_verdict():
     ), patch("ingest.alignment.get_llm", return_value=MagicMock()):
         result = await evaluate_alignment(record, vault_by_name)
 
-    assert len(result.vault_verdicts) == 1
-    rv = result.vault_verdicts[0]
+    assert len(result.route_verdicts) == 1
+    rv = result.route_verdicts[0]
     assert isinstance(rv, RouteVerdict)
     assert rv.route == "vault_aligned"
     assert rv.verdict == "vault_supported"
@@ -301,8 +301,8 @@ async def test_evaluate_not_supported_verdict():
     ), patch("ingest.alignment.get_llm", return_value=MagicMock()):
         result = await evaluate_alignment(record, vault_by_name)
 
-    assert len(result.vault_verdicts) == 1
-    rv = result.vault_verdicts[0]
+    assert len(result.route_verdicts) == 1
+    rv = result.route_verdicts[0]
     assert rv.verdict == "not_supported"
     # Falls back to the note name when the LLM gives no supporting_note.
     assert rv.provenance == "SOURCE-b"
@@ -329,8 +329,8 @@ async def test_evaluate_contradicted_verdict():
     ), patch("ingest.alignment.get_llm", return_value=MagicMock()):
         result = await evaluate_alignment(record, vault_by_name)
 
-    assert len(result.vault_verdicts) == 1
-    rv = result.vault_verdicts[0]
+    assert len(result.route_verdicts) == 1
+    rv = result.route_verdicts[0]
     assert rv.route == "vault_aligned"
     assert rv.verdict == "vault_contradicted"
     assert rv.reasoning == "The evidence directly contradicts the claim."
@@ -366,7 +366,7 @@ async def test_evaluate_skips_empty_claim_text():
         result = await evaluate_alignment(record, vault_by_name)
 
     mock_llm_call.assert_not_called()
-    assert result.vault_verdicts == []
+    assert result.route_verdicts == []
 
 
 @pytest.mark.asyncio
@@ -379,8 +379,8 @@ async def test_evaluate_note_not_in_vault():
         result = await evaluate_alignment(record, {})
 
     mock_llm_call.assert_not_called()
-    assert len(result.vault_verdicts) == 1
-    rv = result.vault_verdicts[0]
+    assert len(result.route_verdicts) == 1
+    rv = result.route_verdicts[0]
     assert rv.route == "vault_aligned"
     assert rv.verdict == VaultVerdict.NOTE_NOT_IN_VAULT.value
     assert rv.provenance == "SOURCE-missing"
@@ -399,8 +399,8 @@ async def test_evaluate_insufficient_content():
         result = await evaluate_alignment(record, vault_by_name)
 
     mock_llm_call.assert_not_called()
-    assert len(result.vault_verdicts) == 1
-    rv = result.vault_verdicts[0]
+    assert len(result.route_verdicts) == 1
+    rv = result.route_verdicts[0]
     assert rv.verdict == VaultVerdict.INSUFFICIENT_VAULT_CONTENT.value
     assert rv.provenance == "SOURCE-empty"
 
@@ -433,8 +433,8 @@ async def test_evaluate_union_semantics():
     ), patch("ingest.alignment.get_llm", return_value=MagicMock()):
         result = await evaluate_alignment(record, vault_by_name)
 
-    assert len(result.vault_verdicts) == 2
-    verdicts = {rv.provenance: rv.verdict for rv in result.vault_verdicts}
+    assert len(result.route_verdicts) == 2
+    verdicts = {rv.provenance: rv.verdict for rv in result.route_verdicts}
     assert verdicts["SOURCE-good"] == "vault_supported"
     assert verdicts["SOURCE-bad"] == "not_supported"
 
@@ -453,7 +453,7 @@ async def test_evaluate_llm_returns_none():
     ), patch("ingest.alignment.get_llm", return_value=MagicMock()):
         result = await evaluate_alignment(record, vault_by_name)
 
-    assert result.vault_verdicts == []
+    assert result.route_verdicts == []
 
 
 @pytest.mark.asyncio
@@ -471,7 +471,7 @@ async def test_evaluate_no_web_verdict():
         result = await evaluate_alignment(record, {"SOURCE-a": make_vault_note("SOURCE-a", "web-page")})
 
     mock_llm_call.assert_not_called()
-    assert result.vault_verdicts == []
+    assert result.route_verdicts == []
 
 
 @pytest.mark.asyncio
@@ -498,7 +498,7 @@ async def test_evaluate_provenance_recorded():
     ), patch("ingest.alignment.get_llm", return_value=MagicMock()):
         result = await evaluate_alignment(record, vault_by_name)
 
-    rv = result.vault_verdicts[0]
+    rv = result.route_verdicts[0]
     assert rv.provenance == "QUOTE-prov"
     assert rv.provenance_type == "vault_note"
 
@@ -526,8 +526,8 @@ async def test_evaluate_falls_back_to_full_vault():
     ), patch("ingest.alignment.get_llm", return_value=MagicMock()):
         result = await evaluate_alignment(record, filtered_vault, full_vault)
 
-    assert len(result.vault_verdicts) == 1
-    rv = result.vault_verdicts[0]
+    assert len(result.route_verdicts) == 1
+    rv = result.route_verdicts[0]
     assert rv.verdict == "vault_supported"
     assert rv.provenance == "SOURCE-untagged"
 
@@ -543,5 +543,5 @@ async def test_evaluate_note_not_in_vault_even_with_full_vault():
         result = await evaluate_alignment(record, {}, {})
 
     mock_llm_call.assert_not_called()
-    assert len(result.vault_verdicts) == 1
-    assert result.vault_verdicts[0].verdict == VaultVerdict.NOTE_NOT_IN_VAULT.value
+    assert len(result.route_verdicts) == 1
+    assert result.route_verdicts[0].verdict == VaultVerdict.NOTE_NOT_IN_VAULT.value

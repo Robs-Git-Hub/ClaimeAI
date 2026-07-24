@@ -25,3 +25,11 @@ EVIDENCE_EVALUATION_CONFIG = {
 ITERATIVE_SEARCH_CONFIG = {
     "max_iterations": _pipeline.get("max_search_iterations", 5),
 }
+
+# TG 03.4: cheap-tier condensation of raw evidence before the high-tier
+# evaluate_evidence call judges it. "enabled=False" restores pre-TG-03.4
+# behavior byte-for-byte (evaluate_evidence reads raw evidence).
+EVIDENCE_SUMMARIZATION_CONFIG = {
+    "enabled": _pipeline.get("summarize_evidence", True),
+    "tier": "mid",
+}

@@ -110,9 +110,8 @@ async def process_with_voting(
     Returns:
         List of successfully processed results
     """
-    results = []
 
-    for item in items:
+    async def _process_one(item: T) -> Optional[Any]:
         # Make multiple attempts
         attempts = await asyncio.gather(
             *[processor(item, llm) for _ in range(completions)]
@@ -126,14 +125,19 @@ async def process_with_voting(
             logger.info(
                 f"Not enough successes ({success_count}/{min_successes}) for {description}"
             )
-            continue
+            return None
 
         # Use the first successful result
         for success, result in attempts:
             if success and result is not None:
                 processed_result = result_factory(result, item)
                 if processed_result:
-                    results.append(processed_result)
-                    break
+                    return processed_result
 
-    return results
+        return None
+
+    # Parallelize across items too -- each item's own attempts are already
+    # gathered concurrently above; gathering across items as well turns what
+    # used to be N sequential rounds into one round of N * completions calls.
+    raw_results = await asyncio.gather(*[_process_one(item) for item in items])
+    return [result for result in raw_results if result is not None]

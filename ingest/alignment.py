@@ -12,7 +12,7 @@ Two-step design:
     2. ``evaluate_alignment`` — async. Calls the LLM (at the ``high`` tier;
        never downgrade — see docs/playbook/model-tier-selection.md) once per
        cited note that has evidence, and appends a `RouteVerdict` per note
-       to `claim_record.vault_verdicts`.
+       to `claim_record.route_verdicts`.
 
 Read-only against the vault, same as ingest/vault_serializer.py.
 """
@@ -173,7 +173,7 @@ async def evaluate_alignment(
 ) -> ClaimRecord:
     """Evaluate each cited note in ``claim_record.cite_set`` against its text.
 
-    Appends one `RouteVerdict` per cited note to `claim_record.vault_verdicts`
+    Appends one `RouteVerdict` per cited note to `claim_record.route_verdicts`
     (route="vault_aligned"). No-ops (returns unchanged) if the claim is not
     cited, has an empty cite set, or has no web_verdict to source claim text
     from. If the LLM call fails (returns None), that note is silently
@@ -188,10 +188,7 @@ async def evaluate_alignment(
     if claim_record.citation_status != CitationStatus.CITED or not claim_record.cite_set:
         return claim_record
 
-    if claim_record.web_verdict is None:
-        return claim_record
-
-    claim_text = claim_record.web_verdict.claim_text
+    claim_text = claim_record.claim_text
     if not claim_text or not claim_text.strip():
         return claim_record
 
@@ -203,7 +200,7 @@ async def evaluate_alignment(
             result = gather_evidence(note_name, full_vault_by_name)
 
         if result.cited_note_name is None:
-            claim_record.vault_verdicts.append(
+            claim_record.route_verdicts.append(
                 RouteVerdict(
                     route="vault_aligned",
                     verdict=result.verdict,
@@ -235,7 +232,7 @@ async def evaluate_alignment(
         if response is None:
             continue
 
-        claim_record.vault_verdicts.append(
+        claim_record.route_verdicts.append(
             RouteVerdict(
                 route="vault_aligned",
                 verdict=response.verdict,

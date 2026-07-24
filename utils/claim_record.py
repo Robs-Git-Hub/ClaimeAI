@@ -13,6 +13,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from claim_extractor.schemas import ValidatedClaim
 from claim_verifier.schemas import Verdict
 
 
@@ -97,10 +98,29 @@ class ClaimRecord(BaseModel):
     Wraps the existing Phase 01 `Verdict` rather than replacing it. Phase 03
     fields (`triage_class`, `citation_expectation`, `importance`) default to
     None so later phases don't require schema migrations.
+
+    **Claim identity vs. web verdict (TG 03.3).** Claim identity (the
+    extracted claim text and its provenance indices) lives in the ``claim``
+    field, populated straight from extraction *before* any verification has
+    run. ``web_verdict`` holds *only* a real web verification result and stays
+    ``None`` until the web route actually runs — it is never fabricated to
+    carry identity (an identity-only ``Verdict`` is impossible: ``result`` is
+    required and its only values are the honest Supported/Refuted). Read claim
+    text via the ``claim_text`` property, which prefers ``claim`` and falls
+    back to ``web_verdict`` so Phase 01/02 records built the old way (verdict
+    carries identity) keep working unchanged.
     """
 
+    claim: Optional[ValidatedClaim] = Field(
+        default=None,
+        description=(
+            "Claim identity from extraction (claim_text + provenance indices), "
+            "present before any verification. The honest identity carrier for "
+            "records that have not been web-verified yet."
+        ),
+    )
     web_verdict: Optional[Verdict] = Field(
-        default=None, description="Existing Phase 01 web verification result"
+        default=None, description="Real Phase 01 web verification result (None until web runs)"
     )
     citation_status: CitationStatus = Field(
         description="Whether the claim has a parseable citation"
@@ -112,8 +132,14 @@ class ClaimRecord(BaseModel):
     position: Optional[DraftPosition] = Field(
         default=None, description="Location of the claim in the draft"
     )
-    vault_verdicts: List[RouteVerdict] = Field(
-        default_factory=list, description="Per-route vault verification results"
+    route_verdicts: List[RouteVerdict] = Field(
+        default_factory=list,
+        description=(
+            "Per-route verification results (web, vault_aligned, vault_matched, "
+            "and future routes). Renamed from `vault_verdicts` in TG 03.3 — the "
+            "list was always route-generic; the old name predated the web route "
+            "being folded into it."
+        ),
     )
     suggested_action: Optional[SuggestedAction] = Field(
         default=None, description="What the author should do"
@@ -133,3 +159,26 @@ class ClaimRecord(BaseModel):
     importance: Optional[int] = Field(
         default=None, description="Phase 03: importance score (1-5)"
     )
+    routing_decision: Optional[str] = Field(
+        default=None,
+        description='Phase 03 (TG 03.2): the routing decision, e.g. "resolved", '
+        '"skip-trivial", "route-web", "unverifiable-by-available-routes"',
+    )
+    routing_reason: Optional[str] = Field(
+        default=None, description="Phase 03 (TG 03.2): human-readable reason for the routing decision"
+    )
+
+    @property
+    def claim_text(self) -> Optional[str]:
+        """The claim's text, from ``claim`` if present else ``web_verdict``.
+
+        The single accessor every stage should use for claim identity, so
+        that records built pre-verification (``claim`` set, ``web_verdict``
+        None) and records built the Phase 01/02 way (``web_verdict`` carries
+        identity) both resolve correctly.
+        """
+        if self.claim is not None and self.claim.claim_text:
+            return self.claim.claim_text
+        if self.web_verdict is not None:
+            return self.web_verdict.claim_text
+        return None

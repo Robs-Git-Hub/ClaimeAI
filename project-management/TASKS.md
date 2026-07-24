@@ -208,22 +208,46 @@ Assigns `suggested_action` from verdicts; renders per-claim details with provena
 
 Plan: `phase-plans/phase-03-triage-and-routing.md`. Corpus RAG split out to Phase 04 (user decision, Session 8); router built as an extension point so Phase 04 and future routes (specialist DB searches) are additive. Web spend triage-gated. Milestone: routed heavy run on `workspace/inbox/ukraine-intro-test.txt`.
 
-### TG 03.1: Triage Classifier
+Amended Session 8 (user decision): TG 03.4 Evidence Summarization added (cheap-model extraction of claim-relevant content from raw search results before high-tier evaluation — user cost principle #1); Quality & Wrap renumbered 03.4 → 03.5.
 
-- [ ] 03.1.x Triage vocabulary documented in claim-record-design.md; batch classification (mid tier or below) populates triage_class / citation_expectation / importance; conservative-up on uncertainty; offline tests + characterized-file expectations (3 dataset-dependent claims classified as such)
+### TG 03.1: Triage Classifier — COMPLETE
 
-### TG 03.2: Routing Policy and Route Registry
+- [x] 03.1.1 Triage vocabulary documented in claim-record-design.md: TriageClass (trivial, general-factual, academic-citable, dataset-dependent, novel-result), CitationExpectation (expected, not-expected, optional), importance (1–5). Conservative-up rule: uncertain → non-trivial; uncertain between never-web and web-verifiable → web-verifiable.
+- [x] 03.1.2 `ingest/triage.py`: `triage_claims()` — one mid-tier batch call over all claims, Literal-typed structured output, importance clamped 1–5 in code, omitted claims stay None (never default to trivial). 13 tests in `tests/test_triage.py`.
+- [x] 03.1.3 Triage prompt tightened (Session 8 milestone review): dataset-dependent = author's own private data ONLY (not public records); explicit counter-examples (vote tallies, IGO records → general-factual); directional tie-break toward web-verifiable.
 
-- [ ] 03.2.x Pure routing function (ClaimRecord × available_routes → decision), route-handler interface with web route as first implementation (per-claim claim_verifier reuse); extensibility proof test (fake route = stub handler + manifest declaration + policy-table row); routing table reviewed by user before milestone
+### TG 03.2: Routing Policy and Route Registry — COMPLETE
 
-### TG 03.3: Orchestration and Report Extension
+- [x] 03.2.1 `ingest/routing.py`: `decide_route()` (pure function, module-level POLICY table), `execute_routing()` (dispatches to registered handlers), web handler reuses claim_verifier graph per-claim. Policy: vault-resolved → stop; trivial → skip; novel-result/dataset-dependent → never web; general/academic/unclassified → web if available.
+- [x] 03.2.2 ClaimRecord extended: `routing_decision`, `routing_reason`, `claim` (ValidatedClaim identity independent of web_verdict). `vault_verdicts` renamed to `route_verdicts` across codebase.
+- [x] 03.2.3 Extensibility proof test: fake route (stub handler + manifest declaration + policy-table row) routes correctly. 28 tests in `tests/test_routing.py`.
+- [x] 03.2.4 Routing table reviewed by user (Session 8) — approved without circuit-breaker.
 
-- [ ] 03.3.x Production heavy-run entry point (parse → extract → bind → vault verify → triage → route → web) replacing spot-check demo wiring; gap report gains triage class, route taken, cost/route summary; manifest-adaptive sections; light-profile regression
+### TG 03.3: Orchestration and Report Extension — COMPLETE
 
-### TG 03.4: Quality & Wrap
+- [x] 03.3.1 `scripts/run_heavy.py`: production entry point. CLI: draft path + --vault + --argument-pyramid + --profile + --no-web. Composes: parse → extract (Claimify in-process) → bind_extracted_claims → vault verify (alignment + batch match + verify + fallback) → triage → routing → gap report. Outputs workspace/output/<stem>/results.json + report.md.
+- [x] 03.3.2 Gap report extended: per-claim triage/routing fields, route summary (counts per decision, web calls avoided vs Phase 01 baseline), unparsed-citation count in header, vault-improvement signals for fallback matches ("consider adding argument_pyramid tag").
+- [x] 03.3.3 Full-vault fallback for batch matching: one additional batch call (high tier, Session 8 user decision) against evidence-type-filtered full vault for claims unmatched by pass 1. Config-switchable (vault_match_fallback in config.toml, default on). Stale no_vault_match superseded when fallback finds match.
+- [x] 03.3.4 Batch-match prompt amended: contradiction-seeking (same fact different number = match); keyword pre-filter surfaces priority candidates from vault.
+- [x] 03.3.5 8 tests in `tests/test_orchestration.py`. 340 tests total (337 non-slow), all green.
 
-- [ ] 03.4.1 MILESTONE: routed heavy run on ukraine-intro-test.txt — 3 dataset-dependent claims route away from web; report judged useful by user
-- [ ] 03.4.2 Light-profile regression; offline suite green; docs-align-check; CLAUDE.md/claim-record-design.md/TASKS.md/HANDOVER.md current; push to origin
+### TG 03.4: Evidence Summarization — COMPLETE
+
+- [x] 03.4.1 `claim_verifier/evidence_summarization.py`: `summarize_evidence_for_claim()` — reusable (claim_text + evidence items → condensed items). Mid tier. Preserves refuting content (prompted + safety: omitted sources keep raw text). URL attribution from originals by index (hallucinated URLs can't corrupt provenance). Fallback to raw on any failure.
+- [x] 03.4.2 Config: `summarize_evidence` in config.toml (default true, off = byte-compatible). Pre-processing inside evaluate_evidence_node (not a separate graph node — avoids LangGraph reducer duplication).
+- [x] 03.4.3 Token accounting: INFO log per claim (raw_chars, summarized_chars, raw_tokens_est, summarized_tokens_est, reduction%). Live results: 60–84% reduction. 19 tests in `tests/test_evidence_summarization.py`.
+
+### TG 03.5: Pipeline Parallelization — COMPLETE
+
+- [x] 03.5.1 `process_with_voting()`: all sentences vote concurrently (asyncio.gather across items). Voting logic (2/3 majority) unchanged.
+- [x] 03.5.2 `execute_routing()`: all handler invocations concurrent with Semaphore(5). Policy decisions still sequential (pure, fast).
+- [x] 03.5.3 `verify_matches()`: all per-proposal verifications concurrent with Semaphore(5).
+- [x] 03.5.4 Wall-clock: ~13 min → ~4 min on standard test file (3.4x speedup). 340 tests, all green.
+
+### TG 03.6: Quality & Wrap — IN PROGRESS
+
+- [x] 03.6.1 MILESTONE: final routed heavy run on ukraine-intro-test.txt (Session 8) — 15 claims, 8 vault-resolved (including "98 votes" caught as vault_contradicted with 4 provenance notes), 7 web-checked (3 Supported, 3 Refuted, 1 Supported), 1 skip-trivial. Summarization: 60–84% reduction. Parallelization: ~4 min wall-clock. Tag-gap signals: 19 notes surfaced for argument_pyramid tagging.
+- [x] 03.6.2 docs-align-check ran (Session 8 wrap); CLAUDE.md updated with Phase 03 modules, pipeline, quality gates; TASKS.md current; HANDOVER.md updated; pushed to origin.
 
 Task breakdown within each TG is the implementing session's job (plan defines goals/success criteria/constraints; see activity-planning skill).
 

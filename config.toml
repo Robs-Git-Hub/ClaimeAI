@@ -12,6 +12,14 @@ llm_provider = "openai"         # "openai" or "openrouter"
 search_provider = "exa"         # "exa" or "tavily"
 results_per_query = 3           # search results per query
 max_search_iterations = 5       # max search rounds per claim
+summarize_evidence = true       # condense raw evidence at "mid" tier before
+                                 # high-tier evaluation (TG 03.4); false =
+                                 # evaluate_evidence reads raw evidence (pre-TG-03.4 behavior)
+vault_match_fallback = true     # citation-free vault matching: after the argument_pyramid-
+                                 # filtered pass, run ONE extra mid-tier batch call against the
+                                 # full vault (evidence-type filtered only) for still-unmatched
+                                 # claims, catching notes missing the argument_pyramid tag.
+                                 # false = current single-pass (filtered-corpus-only) behavior
 
 [models.openai]
 low = "openai:gpt-4o-mini"

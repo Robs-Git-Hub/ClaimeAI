@@ -138,7 +138,7 @@ def test_claim_record_minimal():
     assert record.citation_status == CitationStatus.CITATION_FREE
     assert record.cite_set == []
     assert record.position.sentence_index == 0
-    assert record.vault_verdicts == []
+    assert record.route_verdicts == []
     assert record.suggested_action is None
     assert record.claim_strength is None
     assert record.evidence_quality is None
@@ -177,7 +177,7 @@ def test_claim_record_full():
             char_start=200,
             char_end=260,
         ),
-        vault_verdicts=[route_verdict],
+        route_verdicts=[route_verdict],
         suggested_action=SuggestedAction.NONE,
         claim_strength=4,
         evidence_quality=5,
@@ -189,7 +189,7 @@ def test_claim_record_full():
     assert record.citation_status == CitationStatus.CITED
     assert record.cite_set == ["Some Source Note"]
     assert record.position.section == "Background"
-    assert record.vault_verdicts == [route_verdict]
+    assert record.route_verdicts == [route_verdict]
     assert record.suggested_action == SuggestedAction.NONE
     assert record.claim_strength == 4
     assert record.evidence_quality == 5
@@ -279,7 +279,7 @@ def test_serialization_round_trip():
         citation_status=CitationStatus.UNPARSED_CITATION,
         cite_set=["Note A", "Note B"],
         position=DraftPosition(sentence_index=2, section="Methods", section_index=2),
-        vault_verdicts=[
+        route_verdicts=[
             RouteVerdict(route="vault_aligned", verdict="not_supported", reasoning="Quote mismatch")
         ],
         suggested_action=SuggestedAction.FIX_CITATION,
@@ -300,6 +300,45 @@ def test_serialization_round_trip():
 # ---------------------------------------------------------------------------
 # ClaimRecord with existing Verdict
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Phase 03 (TG 03.2): routing_decision / routing_reason
+# ---------------------------------------------------------------------------
+
+
+def test_routing_fields_default_to_none():
+    record = ClaimRecord(
+        citation_status=CitationStatus.CITATION_FREE,
+        position=DraftPosition(sentence_index=0),
+    )
+    assert record.routing_decision is None
+    assert record.routing_reason is None
+
+
+def test_routing_fields_settable():
+    record = ClaimRecord(
+        citation_status=CitationStatus.CITATION_FREE,
+        position=DraftPosition(sentence_index=0),
+        routing_decision="route-web",
+        routing_reason="general: routed to 'web'",
+    )
+    assert record.routing_decision == "route-web"
+    assert record.routing_reason == "general: routed to 'web'"
+
+
+def test_routing_fields_serialization_round_trip():
+    original = ClaimRecord(
+        citation_status=CitationStatus.CITATION_FREE,
+        position=DraftPosition(sentence_index=0),
+        routing_decision="skip-trivial",
+        routing_reason="trivial: no verification needed.",
+    )
+    dumped = original.model_dump()
+    restored = ClaimRecord.model_validate(dumped)
+    assert restored == original
+    assert restored.routing_decision == "skip-trivial"
+    assert restored.routing_reason == "trivial: no verification needed."
 
 
 def test_claim_record_wraps_existing_verdict():

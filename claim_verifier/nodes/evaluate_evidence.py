@@ -13,6 +13,7 @@ from utils import (
     truncate_evidence_for_token_limit,
 )
 
+from claim_verifier.evidence_summarization import summarize_evidence_for_claim
 from claim_verifier.prompts import (
     EVIDENCE_EVALUATION_HUMAN_PROMPT,
     EVIDENCE_EVALUATION_SYSTEM_PROMPT,
@@ -70,8 +71,19 @@ async def evaluate_evidence_node(state: ClaimVerifierState) -> dict:
         current_time=get_current_timestamp()
     )
 
+    # TG 03.4: condense evidence at a cheap tier before the high-tier judge
+    # reads it. Only affects what's fed into the evaluation prompt below -
+    # `sources` on the final Verdict (built further down) is always built
+    # from the raw `evidence_snippets`, so the audit trail stays intact
+    # regardless of the summarization switch. See
+    # claim_verifier/evidence_summarization.py for the placement/tier
+    # rationale and the config-off byte-compatibility guarantee.
+    evidence_for_evaluation = await summarize_evidence_for_claim(
+        claim.claim_text, evidence_snippets
+    )
+
     truncated_evidence = truncate_evidence_for_token_limit(
-        evidence_items=evidence_snippets,
+        evidence_items=evidence_for_evaluation,
         claim_text=claim.claim_text,
         system_prompt=system_prompt,
         human_prompt_template=EVIDENCE_EVALUATION_HUMAN_PROMPT,

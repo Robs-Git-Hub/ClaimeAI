@@ -1,6 +1,6 @@
 # Phase 03: Triage & Routing
 
-**Status:** APPROVED (user sign-off Session 8, 2026-07-24) — ready for implementation
+**Status:** COMPLETE (Session 8, 2026-07-24). Planned, amended twice, implemented, and milestone-accepted in a single session. TGs 03.1–03.5 fully implemented; TG 03.6 wrap complete. Amendments: TG 03.4 Evidence Summarization added mid-session (user cost principle #1); TG 03.5 Pipeline Parallelization added after milestone review (wall-clock reduction); full-vault fallback promoted to high tier + contradiction-seeking prompt added after the "98 votes" vault recall failure.
 **Goal:** Route every claim to the cheapest verification method that can actually verify it. Triage first, then route: vault (Phase 02) or web (Phase 01), with web spend gated by triage. The router is built to be extended — corpus RAG (Phase 04) and future routes (e.g. specialist DB searches via API) plug in without rework.
 
 > **Scope decision (user, Session 8):** corpus RAG via doc-rag-backend is split out to **Phase 04** — planning and implementation, including the first-client discovery of api.ragtogo.com. Phase 03's job is the self-contained cost win (triage + routing + web reuse + production orchestration) and a router designed for additional routes. Vault QA (verifying vault notes against original sources) remains a separate backlog capability — a different domain of work from draft-claim verification.
@@ -95,7 +95,43 @@ Full-paper routed runs are NOT part of the Phase 03 gate; they remain available 
 
 **Context:** HANDOVER (Session 7) flagged that Phase 02 functions were never wired into production entry points — `spot_check_vault.py` is demo wiring. This TG pays down that integration debt as part of delivering the routed pipeline.
 
-### TG 03.4: Quality & Wrap
+### TG 03.4: Evidence Summarization (added by amendment, Session 8)
+
+**Goal:** Cut the web route's high-tier input cost: a cheap model extracts claim-relevant evidence from raw search results before the high-tier evaluation judges it.
+
+**Success criteria:**
+- A summarization step in `claim_verifier`'s evidence path: low or mid tier condenses raw search results into claim-relevant extracts; `evaluate_evidence` (high tier, unchanged) judges the extracts, not raw dumps.
+- Summaries preserve refuting as well as supporting content, and retain source attribution (URL) so provenance survives to the verdict.
+- Config-switchable in `config.toml` (on by default; off restores current behavior) — enables A/B comparison and a safe rollback.
+- Token accounting: raw vs. summarized evidence sizes logged (extend the existing cost-tracking logging pattern) so the saving is measurable, not assumed.
+- Offline tests with mocked LLM; a live cost-delta measurement on the milestone file's web-routed claims is recorded at wrap.
+
+**Constraints:**
+- Evaluation itself never drops below `high` tier (standing rule) — this TG changes what the evaluator reads, not who evaluates.
+- The summarizer must be instructed against support-bias: contradicting/exculpatory evidence must survive summarization. A spot-check comparing verdicts with summarization on vs. off on the same claims is part of acceptance.
+- Changes confined to the `claim_verifier` evidence path; light-profile behavior with the switch off must be byte-compatible.
+
+**Context:** Session 4 cost analysis: 76% of the $10/paper cost sat in the high tier, much of it input tokens — Exa returns ~30KB, Tavily up to ~1.1MB of raw content per run (Session 3 comparison). This is user cost principle #1 ("intelligence is for judgment, not for reading"). The Phase 04 corpus route reuses this component for retrieved passages — build it as a reusable summarize-before-judge step, not a web-only special case.
+
+### TG 03.5: Pipeline Parallelization (added by amendment, Session 8)
+
+**Goal:** Cut wall-clock time by parallelizing independent LLM calls that are currently sequential, with no changes to prompts, models, or verdict logic.
+
+**Success criteria:**
+- Voting loops (selection + disambiguation): all sentences vote concurrently instead of sequentially. For N sentences × 3 votes, wall-clock drops from N sequential rounds to ~1 round (the 3 votes per sentence are already parallel; this parallelizes across sentences).
+- Web verification: claims routed to web are verified concurrently (bounded by a semaphore to avoid rate limits) instead of one at a time through the claim_verifier graph.
+- Vault verify: per-proposal verification calls run concurrently instead of sequentially.
+- Offline test suite stays green (correctness unchanged — these are pure concurrency changes to independent work items).
+- Measurable wall-clock improvement on the standard test file vs. the pre-parallelization baseline.
+
+**Constraints:**
+- Concurrency must be bounded (semaphore) — OpenRouter and Exa both have rate limits. A reasonable default (e.g. 5–10 concurrent) should be config-settable or at least a module constant.
+- Do not change any prompts, model tiers, or verdict semantics — this is purely a latency optimization.
+- The voting quality gate (2/3 majority) must be preserved exactly — parallelizing across sentences doesn't change the per-sentence voting logic.
+
+**Context:** The Session 8 milestone re-run on the 250-word test file took ~13 minutes. Bottleneck analysis showed ~60+ sequential API rounds where ~15–20 would suffice. The three parallelization targets (voting loops, web verification, vault verify) are all independent-item loops with no cross-item dependencies. Extraction caching (content-hash → skip re-extraction on re-runs) is a nice-to-have but not required for this TG.
+
+### TG 03.6: Quality & Wrap
 
 **Goal:** Prove the phase milestone and leave the project handover-clean.
 
@@ -111,7 +147,7 @@ Full-paper routed runs are NOT part of the Phase 03 gate; they remain available 
 ## Success Criteria (phase)
 
 - The standard test file, run heavy with vault + web declared, produces a report where every claim shows: triage class, route(s) taken, verdict(s) with provenance, suggested action — and the three dataset-dependent claims demonstrably avoid the web route.
-- Web spend on the test file is measurably below the ungated Phase 01 baseline for the same file.
+- Web spend on the test file is measurably below the ungated Phase 01 baseline for the same file — via both levers: fewer web calls (triage gating) and cheaper web calls (evidence summarization, with the raw-vs-summarized token delta recorded).
 - Adding a route is demonstrably additive (the fake-route extensibility test passes; Phase 04's corpus route is the real-world validation).
 - A manifest without web (or without vault) degrades cleanly — routes absent, run intact.
 
@@ -120,6 +156,7 @@ Full-paper routed runs are NOT part of the Phase 03 gate; they remain available 
 - **Triage misclassification.** A load-bearing claim marked trivial is silently unverified. Mitigation: conservative-up classification, characterized-file spot-checks, routing table reviewed by user before milestone.
 - **Premature abstraction in the route interface.** Designing for imagined future routes bloats Phase 03. Mitigation: the interface is validated by exactly two real routes (web now, corpus in Phase 04); anything more speculative is out of scope.
 - **Orchestration scope creep.** Wiring the full pipeline could balloon into refactoring Phase 01/02 internals. Mitigation: orchestration composes existing functions; internal changes to extraction/vault modules are out of scope unless a bug blocks the milestone.
+- **Summarization bias.** A summarizer that quietly drops refuting evidence turns "Refuted" claims into "Supported" ones — worse than the cost it saves. Mitigation: explicit keep-contradicting-content instruction, verdict A/B spot-check (summarization on vs. off) as part of TG 03.4 acceptance, config switch for rollback.
 
 ## Roadmap (after Phase 03)
 

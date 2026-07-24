@@ -46,14 +46,14 @@ def make_verdict(claim_text, result=VerificationResult.SUPPORTED):
 def make_record(
     claim_text,
     citation_status=CitationStatus.CITATION_FREE,
-    vault_verdicts=None,
+    route_verdicts=None,
     web_result=VerificationResult.SUPPORTED,
 ):
     return ClaimRecord(
         web_verdict=make_verdict(claim_text, web_result),
         citation_status=citation_status,
         position=DraftPosition(sentence_index=0),
-        vault_verdicts=vault_verdicts or [],
+        route_verdicts=route_verdicts or [],
     )
 
 
@@ -66,7 +66,7 @@ def test_action_none_when_vault_supported():
     record = make_record(
         "Claim A",
         citation_status=CitationStatus.CITED,
-        vault_verdicts=[
+        route_verdicts=[
             RouteVerdict(
                 route="vault_aligned", verdict="vault_supported", provenance="SOURCE-a"
             )
@@ -82,7 +82,7 @@ def test_action_revise_when_contradicted():
     record = make_record(
         "Claim B",
         citation_status=CitationStatus.CITATION_FREE,
-        vault_verdicts=[
+        route_verdicts=[
             RouteVerdict(
                 route="vault_matched", verdict="vault_contradicted", provenance="NOTE-b"
             )
@@ -98,7 +98,7 @@ def test_action_fix_citation_when_miscite():
     record = make_record(
         "Claim C",
         citation_status=CitationStatus.CITED,
-        vault_verdicts=[
+        route_verdicts=[
             RouteVerdict(
                 route="vault_aligned", verdict="not_supported", provenance="SOURCE-c"
             )
@@ -114,7 +114,7 @@ def test_action_add_vault_note_web_only():
     record = make_record(
         "Claim D",
         citation_status=CitationStatus.CITATION_FREE,
-        vault_verdicts=[],
+        route_verdicts=[],
         web_result=VerificationResult.SUPPORTED,
     )
 
@@ -127,7 +127,7 @@ def test_action_add_citation_free_no_match():
     record = make_record(
         "Claim E",
         citation_status=CitationStatus.CITATION_FREE,
-        vault_verdicts=[
+        route_verdicts=[
             RouteVerdict(
                 route="vault_matched", verdict="no_vault_match", provenance=None
             )
@@ -145,7 +145,7 @@ def test_action_unresolved():
         web_verdict=None,
         citation_status=CitationStatus.CITED,
         position=DraftPosition(sentence_index=0),
-        vault_verdicts=[],
+        route_verdicts=[],
     )
 
     result = assign_suggested_actions([record])
@@ -157,7 +157,7 @@ def test_action_contradicted_overrides_supported():
     record = make_record(
         "Claim G",
         citation_status=CitationStatus.CITED,
-        vault_verdicts=[
+        route_verdicts=[
             RouteVerdict(
                 route="vault_aligned", verdict="vault_supported", provenance="SOURCE-g1"
             ),
@@ -184,7 +184,7 @@ def test_report_contains_summary_table():
         make_record(
             "Claim 1",
             citation_status=CitationStatus.CITED,
-            vault_verdicts=[
+            route_verdicts=[
                 RouteVerdict(
                     route="vault_aligned",
                     verdict="vault_supported",
@@ -217,7 +217,7 @@ def test_report_contains_claim_details():
     record = make_record(
         "The sky is blue.",
         citation_status=CitationStatus.CITED,
-        vault_verdicts=[
+        route_verdicts=[
             RouteVerdict(
                 route="vault_aligned",
                 verdict="vault_supported",
@@ -244,7 +244,7 @@ def test_report_vault_improvement_signals():
     record_missing = make_record(
         "Claim about a missing note.",
         citation_status=CitationStatus.CITED,
-        vault_verdicts=[
+        route_verdicts=[
             RouteVerdict(
                 route="vault_aligned",
                 verdict="note_not_in_vault",
@@ -255,7 +255,7 @@ def test_report_vault_improvement_signals():
     record_thin = make_record(
         "Claim about a thin note.",
         citation_status=CitationStatus.CITED,
-        vault_verdicts=[
+        route_verdicts=[
             RouteVerdict(
                 route="vault_aligned",
                 verdict="insufficient_vault_content",
@@ -266,7 +266,7 @@ def test_report_vault_improvement_signals():
     record_web_only = make_record(
         "Claim supported only by web evidence.",
         citation_status=CitationStatus.CITATION_FREE,
-        vault_verdicts=[],
+        route_verdicts=[],
         web_result=VerificationResult.SUPPORTED,
     )
     records = [record_missing, record_thin, record_web_only]
@@ -287,6 +287,71 @@ def test_report_vault_improvement_signals():
     assert "add vault note" in report
 
 
+def test_report_fallback_tagging_signal():
+    """A claim matched by the full-vault fallback pass (Phase 03 milestone
+    review) is marked with provenance_type="vault_note_fallback" -- the
+    report must surface it as a tagging gap for the vault owner."""
+    record_fallback = make_record(
+        "Claim matched outside the paper filter.",
+        citation_status=CitationStatus.CITATION_FREE,
+        route_verdicts=[
+            RouteVerdict(
+                route="vault_matched",
+                verdict="vault_supported",
+                provenance="SOURCE-untagged",
+                provenance_type="vault_note_fallback",
+            )
+        ],
+    )
+    record_normal = make_record(
+        "Claim matched inside the paper filter.",
+        citation_status=CitationStatus.CITATION_FREE,
+        route_verdicts=[
+            RouteVerdict(
+                route="vault_matched",
+                verdict="vault_supported",
+                provenance="SOURCE-tagged",
+                provenance_type="vault_note",
+            )
+        ],
+    )
+    records = [record_fallback, record_normal]
+    assign_suggested_actions(records)
+    manifest = ResourceManifest(draft_path=Path("draft.md"), vault_path=Path("vault"))
+
+    report = render_gap_report(records, manifest)
+
+    assert "### Notes matched outside the paper filter" in report
+    assert "SOURCE-untagged" in report
+    assert "argument_pyramid" in report
+    assert "matched claim #1" in report
+    assert "SOURCE-tagged" not in report.split("### Notes matched outside the paper filter")[1].split(
+        "###"
+    )[0]
+
+
+def test_report_no_fallback_signal_when_no_fallback_matches():
+    record = make_record(
+        "Claim matched normally.",
+        citation_status=CitationStatus.CITATION_FREE,
+        route_verdicts=[
+            RouteVerdict(
+                route="vault_matched",
+                verdict="vault_supported",
+                provenance="SOURCE-tagged",
+                provenance_type="vault_note",
+            )
+        ],
+    )
+    assign_suggested_actions([record])
+    manifest = ResourceManifest(draft_path=Path("draft.md"), vault_path=Path("vault"))
+
+    report = render_gap_report([record], manifest)
+
+    section = report.split("### Notes matched outside the paper filter")[1].split("###")[0]
+    assert "- None" in section
+
+
 def test_report_no_vault_section_when_no_vault():
     record = make_record(
         "Claim without a vault.", citation_status=CitationStatus.CITATION_FREE
@@ -297,8 +362,46 @@ def test_report_no_vault_section_when_no_vault():
     report = render_gap_report([record], manifest)
 
     assert "Vault Improvement Signals" not in report
-    assert "Vault verdicts" not in report
+    assert "Route verdicts" not in report
     assert "not configured" in report
+
+
+def test_report_header_includes_unparsed_citation_count_when_nonzero():
+    """The header must account for every claim: cited + citation-free +
+    unparsed-citation should equal the total, so a nonzero unparsed count
+    (a wikilink the binder couldn't parse) must be visible, not silently
+    folded into a total that doesn't otherwise add up."""
+    records = [
+        make_record("Cited claim.", citation_status=CitationStatus.CITED),
+        make_record("Citation-free claim.", citation_status=CitationStatus.CITATION_FREE),
+        make_record(
+            "Unparsed citation claim.",
+            citation_status=CitationStatus.UNPARSED_CITATION,
+        ),
+        make_record(
+            "Another unparsed citation claim.",
+            citation_status=CitationStatus.UNPARSED_CITATION,
+        ),
+    ]
+    assign_suggested_actions(records)
+    manifest = ResourceManifest(draft_path=Path("draft.md"), vault_path=Path("vault"))
+
+    report = render_gap_report(records, manifest)
+
+    assert "Claims: 4 | Cited: 1 | Citation-free: 1 | Unparsed citation: 2" in report
+
+
+def test_report_header_omits_unparsed_citation_when_zero():
+    """No unparsed-citation claims -> header stays in its original,
+    already-tested-elsewhere form (no dangling ' | Unparsed citation: 0')."""
+    record = make_record("Claim.", citation_status=CitationStatus.CITATION_FREE)
+    assign_suggested_actions([record])
+    manifest = ResourceManifest(draft_path=Path("draft.md"), vault_path=Path("vault"))
+
+    report = render_gap_report([record], manifest)
+
+    assert "Unparsed citation" not in report
+    assert "Claims: 1 | Cited: 0 | Citation-free: 1" in report
 
 
 def test_report_escapes_pipes():
