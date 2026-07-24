@@ -167,7 +167,9 @@ def gather_evidence(
 
 
 async def evaluate_alignment(
-    claim_record: ClaimRecord, vault_by_name: Dict[str, VaultNote]
+    claim_record: ClaimRecord,
+    vault_by_name: Dict[str, VaultNote],
+    full_vault_by_name: Optional[Dict[str, VaultNote]] = None,
 ) -> ClaimRecord:
     """Evaluate each cited note in ``claim_record.cite_set`` against its text.
 
@@ -176,6 +178,12 @@ async def evaluate_alignment(
     cited, has an empty cite set, or has no web_verdict to source claim text
     from. If the LLM call fails (returns None), that note is silently
     skipped — no verdict is appended for it.
+
+    ``full_vault_by_name``, when provided, is an unfiltered vault index used
+    as a fallback for cited notes not found in the (possibly argument-pyramid-
+    filtered) ``vault_by_name``.  This prevents false ``note_not_in_vault``
+    verdicts for notes that exist in the vault but weren't included in the
+    filtered subset.
     """
     if claim_record.citation_status != CitationStatus.CITED or not claim_record.cite_set:
         return claim_record
@@ -191,6 +199,8 @@ async def evaluate_alignment(
 
     for note_name in claim_record.cite_set:
         result = gather_evidence(note_name, vault_by_name)
+        if result.cited_note_name is None and full_vault_by_name is not None:
+            result = gather_evidence(note_name, full_vault_by_name)
 
         if result.cited_note_name is None:
             claim_record.vault_verdicts.append(

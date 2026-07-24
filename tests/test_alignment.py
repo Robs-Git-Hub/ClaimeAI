@@ -501,3 +501,47 @@ async def test_evaluate_provenance_recorded():
     rv = result.vault_verdicts[0]
     assert rv.provenance == "QUOTE-prov"
     assert rv.provenance_type == "vault_note"
+
+
+@pytest.mark.asyncio
+async def test_evaluate_falls_back_to_full_vault():
+    """A note missing from the filtered vault is found in the full vault."""
+    source = make_vault_note(
+        "SOURCE-untagged", "academic-paper", body_sections={"": "Untagged content."}
+    )
+    record = make_claim_record("A claim.", cite_set=["SOURCE-untagged"])
+
+    filtered_vault = {}  # note not in filtered set
+    full_vault = {"SOURCE-untagged": source}
+
+    mock_response = AlignmentOutput(
+        verdict="vault_supported",
+        reasoning="Found via fallback.",
+        supporting_note="SOURCE-untagged",
+    )
+
+    with patch(
+        "ingest.alignment.call_llm_with_structured_output",
+        new=AsyncMock(return_value=mock_response),
+    ), patch("ingest.alignment.get_llm", return_value=MagicMock()):
+        result = await evaluate_alignment(record, filtered_vault, full_vault)
+
+    assert len(result.vault_verdicts) == 1
+    rv = result.vault_verdicts[0]
+    assert rv.verdict == "vault_supported"
+    assert rv.provenance == "SOURCE-untagged"
+
+
+@pytest.mark.asyncio
+async def test_evaluate_note_not_in_vault_even_with_full_vault():
+    """A note missing from both vaults is still note_not_in_vault."""
+    record = make_claim_record("A claim.", cite_set=["SOURCE-truly-missing"])
+
+    with patch(
+        "ingest.alignment.call_llm_with_structured_output", new_callable=AsyncMock
+    ) as mock_llm_call:
+        result = await evaluate_alignment(record, {}, {})
+
+    mock_llm_call.assert_not_called()
+    assert len(result.vault_verdicts) == 1
+    assert result.vault_verdicts[0].verdict == VaultVerdict.NOTE_NOT_IN_VAULT.value
