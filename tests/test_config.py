@@ -71,6 +71,26 @@ def test_reads_summarize_evidence_flag_override(config_file):
     assert result["pipeline"]["summarize_evidence"] is False
 
 
+def test_reads_corpus_api_section(config_file):
+    """TG 04.2.2: [corpus_api] section for the doc-rag-backend client."""
+    path = config_file(
+        '[corpus_api]\nbase_url = "https://api.ragtogo.com"\n'
+        'mode = "hybrid"\ntop_k = 10\n'
+    )
+    result = _load_config(path)
+    assert result["corpus_api"]["base_url"] == "https://api.ragtogo.com"
+    assert result["corpus_api"]["mode"] == "hybrid"
+    assert result["corpus_api"]["top_k"] == 10
+
+
+def test_corpus_api_section_absent_falls_back(tmp_path):
+    """When [corpus_api] is missing, consumers should fall back via .get()."""
+    path = tmp_path / "config.toml"
+    path.write_text('[pipeline]\nllm_provider = "openai"\n', encoding="utf-8")
+    result = _load_config(path)
+    assert result.get("corpus_api", {}).get("base_url") is None
+
+
 def test_malformed_toml_raises(config_file):
     path = config_file("this is not [[[valid toml")
     with pytest.raises(tomllib.TOMLDecodeError):
@@ -87,3 +107,7 @@ def test_real_config_toml_loads():
         assert "models" in result
         # TG 03.4: summarize_evidence defaults to true in the real config.
         assert result["pipeline"].get("summarize_evidence", True) is True
+        # TG 04.2.2: [corpus_api] section for the doc-rag-backend client.
+        assert result["corpus_api"]["base_url"] == "https://api.ragtogo.com"
+        assert result["corpus_api"]["mode"] == "hybrid"
+        assert result["corpus_api"]["top_k"] == 10

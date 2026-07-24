@@ -253,9 +253,47 @@ Task breakdown within each TG is the implementing session's job (plan defines go
 
 ---
 
-## Phases 04–06: Roadmap — FUTURE
+## Phase 04: Corpus RAG Route — APPROVED (Session 9, IN PROGRESS)
 
-- **Phase 04 — Corpus RAG Route:** doc-rag-backend as evidence route. First-client discovery of api.ragtogo.com (we own both repos, sole users — record client needs: DB content visibility, search by author+title/DOI/Zotero ref, API help/docs; improvements via direct edit + redeploy to Hetzner, or cross-repo communication note actioned by an agent in the doc-rag-backend repo; must not degrade other potential clients). Then client: `GET /search` scoped by `manifest.corpus_ids`, `"corpus"` route registered, high-tier evidence evaluation with document-id provenance.
+Plan: `phase-plans/phase-04-corpus-rag-route.md`. Backend repo cloned at `../doc-rag-backend` (Session 9 prep); API contract mapped from repo `main` — must be live-verified (`origin/dev` was 6 commits ahead at clone time).
+
+### TG 04.1: First-Client Discovery (live)
+
+- [x] 04.1.1 Read doc-rag-backend dev-branch HANDOVER — done (Session 9): migration 008 already applied to prod; env refactor merged to dev, not yet deployed (runtime-safe); Zotero corpus = 123 PDFs discovered, not yet ingested; auth = `DOC_RAG_API_KEY` in `/opt/doc-rag-backend/.env.production.local`, verbatim string compare, unset ⇒ auth bypassed; fresh key = `openssl rand -hex 32` + container recreate
+- [x] 04.1.2 Live discovery against prod: `GET /health` verified (healthy, GROBID disabled). SSH access established (ed25519 key generated + authorized via Hetzner console). Fresh `DOC_RAG_API_KEY` provisioned and deployed (64-char hex, container recreated). `GET /documents` authenticated — prod had 1 test doc, no ukraine sources (eval seed is devtest-only, confirmed). 4 clean PDFs (Kim 2023, Nurullayev & Papa 2023, Zeng 2026, de Carvalho 2025) uploaded via SCP. Ingestion via `POST /documents` **FAILED** — backend's OpenAI key out of quota at embedding stage. Document rows created (d_OOfQK0u0hSFA, d_2IBOCexW_qQY, d_wERrWO7aNPBt, d_MWigEjhYX4xO) but all stages None. PDFs remain on server at `/data/pdfs/`; need OpenAI key topped up or embedding provider switched, then re-ingest.
+- [x] 04.1.3 Environment decision recorded: prod (user-approved Session 9; devtest fallback only if prod lacks the documents)
+- [x] 04.1.4 First client-needs note committed in doc-rag-backend: `docs-meta/client-needs/2026-07-24-claimeai-first-client-needs.md`, commit `463c155` pushed to origin/dev, HANDOVER pointer added. Covers: metadata-search gap, key-provisioning friction, content question. **Finding:** backend's own TASKS.md confirms the 5 eval docs (incl. all 3 ukraine sources) are FROZEN in **devtest only — prod DB has no ukraine sources**. Milestone live corpus leg therefore needs BOTH the API key AND a content decision (prod ingest vs devtest target) — both user-gated, recorded as Risk 1 materialized.
+
+### TG 04.2: Corpus Client
+
+- [x] 04.2.1a Write tests for corpus client (`tests/test_corpus_client.py`): 22 tests via httpx.MockTransport — request shape, header omitted when key unset, response parsing, flat-array pagination loop, conservative citation mapping (ambiguous → dropped), connection/401/500 → None → NARROW (red-first confirmed)
+- [x] 04.2.1b Implement `ingest/corpus_client.py` — `search_corpus()`, `list_documents()` (accumulates partials on mid-loop failure), `map_citations_to_document_ids()`; schemas pinned from backend source (`app/models/`), main-vs-dev diff empty; httpx 0.28.1 already a transitive dep; no rerank params (L018) → NARROW (22 pass)
+- [x] 04.2.2a Write tests for settings/config additions: `RAG_API_KEY` validation, `[corpus_api]` section loading → NARROW (6 new tests, red-first confirmed: `test_settings.py`, `test_config.py`)
+- [x] 04.2.2b Implement settings field + `[corpus_api]` in config.toml + `.env.example` entry → NARROW (28 passed; `utils/config.py` needed no change — loads full TOML dict generically)
+- [x] 04.2.3 TG 04.2 complete — regression check → MID: 366 passed, 3 deselected (Session 9)
+
+### TG 04.3: Corpus Route Handler and Policy
+
+- [x] 04.3.1 `CorpusVerdict` enum (`corpus_supported`, `corpus_contradicted`, `corpus_insufficient`, `no_corpus_hits`) + `provenance_type="corpus_doc_id"` recorded in `claim-record-design.md` ("Corpus Route (Phase 04, TG 04.3)" section), incl. deliberate scope line: corpus only for never-web claims this phase
+- [x] 04.3.2a Tests written first (`tests/test_corpus_route.py`, 15 tests; +4 in `test_run_config.py`): verdict shape + provenance, factory wiring via handlers= override, never-web routes to corpus, manifest gating, API-down → None, high-tier assertion, single summarization + config switch → NARROW (red confirmed)
+- [x] 04.3.2b Implemented `ingest/corpus_route.py`: `make_corpus_route_handler(corpus_ids)` factory (protocol/signature unchanged); route-local high-tier evaluator (claim_verifier's `VerificationResult` enum can't express insufficient — design finding: richer-vocabulary routes need route-local evaluation, alignment.py style); never-web `candidate_routes → ("corpus",)`; `available_routes` consults corpus_ids; small in-scope `_unverifiable_reason` tweak → NARROW (92 pass across 4 files)
+- [x] 04.3.3 TG 04.3 complete — MID: 385 passed, 3 deselected; `ingest/gap_report.py` untouched (zero report-code changes — pillar 3 validated)
+
+### TG 04.4: Orchestration and Milestone
+
+- [x] 04.4.1 `run_heavy.py` corpus scoping: `--corpus-ids` CLI flag (comma-sep, whitespace-tolerant, blank → None), `_parse_corpus_ids()`, handler-dict wiring per corpus_route docstring contract (explicit `route_handlers` override still respected). 14 new tests in `test_orchestration.py` (red-first) → NARROW (23 pass) then MID (400 passed, 3 deselected)
+- [ ] 04.4.2 MILESTONE: live heavy run on `workspace/inbox/ukraine-intro-test.txt` with vault + corpus — 3 dataset-dependent claims receive corpus verdicts with provenance (or honest insufficient); user judges report useful; wall-clock + cost recorded → FULL
+
+### TG 04.5: Quality & Wrap
+
+- [ ] 04.5.1 docs-align-check + doc updates (CLAUDE.md key files/pipeline/env vars, claim-record-design.md, websearch-and-costs.md corpus cost profile)
+- [ ] 04.5.2 Cross-repo improvement notes in doc-rag-backend for every confirmed client-need gap
+- [ ] 04.5.3 HANDOVER.md updated; pushed to origin
+
+---
+
+## Phases 05–06: Roadmap — FUTURE
+
 - **Phase 05 — Deep Research Commissions:** human-approved escalation, commission writer, response-paper ingestion + re-evaluation
 - **Phase 06 — Draft Update Loop:** propose citation-inserting draft edits after vault improvement
 

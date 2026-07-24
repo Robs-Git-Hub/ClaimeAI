@@ -62,4 +62,6 @@ class ResourceManifest(BaseModel):
             routes.append("web")
         if self.vault_path is not None:
             routes.extend(["vault_aligned", "vault_matched"])
+        if self.corpus_ids:
+            routes.append("corpus")
         return routes

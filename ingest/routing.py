@@ -150,13 +150,12 @@ POLICY: List[PolicyRow] = [
         name="never-web",
         condition=(
             'triage_class in {"novel-result", "dataset-dependent"} -> NEVER route to '
-            "web, regardless of anything else. No route is declared for these classes "
-            "yet, so they land on unverifiable-by-available-routes until Phase 04's "
-            "corpus route exists (adding it here is a one-line change: "
-            'candidate_routes=("corpus",)).'
+            "web, regardless of anything else. Routed to 'corpus' (TG 04.3, "
+            "ingest/corpus_route.py) when the manifest declares corpus_ids; "
+            "otherwise falls to unverifiable-by-available-routes."
         ),
         applies=_is_never_web,
-        candidate_routes=(),
+        candidate_routes=("corpus",),
     ),
     PolicyRow(
         name="general",
@@ -182,11 +181,18 @@ def _unverifiable_reason(
     """Render a self-explanatory UNVERIFIABLE reason.
 
     The naive rendering ("no available route among []") reads as a bug when
-    a row's `candidate_routes` is empty by design (the "never-web" row: no
-    route is ever a candidate for novel-result/dataset-dependent claims).
-    Instead of showing that empty post-exclusion list, name the route
-    that's being excluded and show the manifest's actual available routes,
-    so the message explains *why* on its own.
+    a row's `candidate_routes` is empty by design (originally true of the
+    "never-web" row, before Phase 04 added `candidate_routes=("corpus",)` to
+    it). Instead of showing an empty post-exclusion list, name the route(s)
+    being excluded and show the manifest's actual available routes, so the
+    message explains *why* on its own.
+
+    Both branches (empty and non-empty `candidate_routes`) name the record's
+    `triage_class` -- TG 04.3 added `candidate_routes=("corpus",)` to the
+    never-web row, which moved that row from the empty branch to the
+    non-empty one; the triage class is included in both so a claim's
+    excluded-from-web reason keeps naming *why* regardless of which branch
+    renders it.
     """
     available_display = ", ".join(available_routes) if available_routes else "none"
 
@@ -199,8 +205,9 @@ def _unverifiable_reason(
 
     candidates_display = ", ".join(row.candidate_routes)
     return (
-        f"{row.name}: candidate route(s) {candidates_display} unavailable or "
-        "already attempted; no other available route can verify this claim "
+        f"{row.name}: triage class '{record.triage_class}' excludes web; "
+        f"candidate route(s) {candidates_display} unavailable or already "
+        "attempted; no other available route can verify this claim "
         f"(available: {available_display})"
     )
 

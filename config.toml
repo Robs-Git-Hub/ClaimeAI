@@ -35,3 +35,8 @@ high = "anthropic/claude-sonnet-5"
 # Only specify tiers that need it — missing tiers default to no reasoning.
 [reasoning.openrouter]
 high = "medium"
+
+[corpus_api]
+base_url = "https://api.ragtogo.com"  # doc-rag-backend corpus search API
+mode = "hybrid"                       # search mode ("hybrid", "dense", "fts")
+top_k = 10                            # number of results to request per query

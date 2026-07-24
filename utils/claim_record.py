@@ -40,6 +40,24 @@ class VaultVerdict(str, Enum):
     NO_VAULT_MATCH = "no_vault_match"
 
 
+class CorpusVerdict(str, Enum):
+    """Route-specific verdicts for corpus-based verification (Phase 04).
+
+    Separate from `VaultVerdict` (vault-route-specific) and
+    `VerificationResult` (web-route-specific) -- see `RouteVerdict.verdict`.
+    Produced by the corpus route (`route="corpus"`, `ingest/corpus_route.py`)
+    for claims the routing policy keeps away from web search (triage
+    classes `novel-result`/`dataset-dependent`) but that the author's own
+    ingested paper corpus (doc-rag-backend) may still be able to confirm
+    or contradict.
+    """
+
+    CORPUS_SUPPORTED = "corpus_supported"
+    CORPUS_CONTRADICTED = "corpus_contradicted"
+    CORPUS_INSUFFICIENT = "corpus_insufficient"
+    NO_CORPUS_HITS = "no_corpus_hits"
+
+
 class SuggestedAction(str, Enum):
     """What the author should do about a claim."""
 
@@ -79,16 +97,17 @@ class DraftPosition(BaseModel):
 class RouteVerdict(BaseModel):
     """A verdict from a specific verification route, with provenance."""
 
-    route: str = Field(description='e.g. "web", "vault_aligned", "vault_matched"')
+    route: str = Field(description='e.g. "web", "vault_aligned", "vault_matched", "corpus"')
     verdict: str = Field(
-        description="Route-specific verdict value (from VaultVerdict or VerificationResult)"
+        description="Route-specific verdict value (from VaultVerdict, VerificationResult, or CorpusVerdict)"
     )
     reasoning: Optional[str] = Field(default=None, description="Explanation")
     provenance: Optional[str] = Field(
-        default=None, description="Note name, quote text, or URL"
+        default=None, description="Note name, quote text, URL, or corpus document/chunk ref"
     )
     provenance_type: Optional[str] = Field(
-        default=None, description='"vault_note", "quote_note", or "web_url"'
+        default=None,
+        description='"vault_note", "quote_note", "web_url", or "corpus_doc_id"',
     )
 
 

@@ -45,16 +45,18 @@ This fork strips the original to the agent backend only (no web frontend, no Chr
 - `ingest/draft_parser.py` — wikilink parsing, author-year detection, sentence splitting, `parse_draft()`
 - `ingest/citation_binder.py` — maps pipeline Verdicts to ClaimRecords via `original_index`
 - `ingest/vault_serializer.py` — parses Obsidian vault notes, filters by argument_pyramid/type, serializes to JSON with token counting
-- `utils/claim_record.py` — ClaimRecord (Phase 02–05 data contract), CitationStatus, VaultVerdict, SuggestedAction, DraftPosition, RouteVerdict
+- `utils/claim_record.py` — ClaimRecord (Phase 02–05 data contract), CitationStatus, VaultVerdict, CorpusVerdict, SuggestedAction, DraftPosition, RouteVerdict
 - `utils/run_config.py` — ResourceManifest (declares evidence sources per run), RunProfile (light/heavy)
 - `ingest/alignment.py` — cited-claim alignment: `gather_evidence()` (one-hop vault traversal) + `evaluate_alignment()` (high-tier LLM evaluation)
 - `ingest/vault_match.py` — citation-free vault matching: `batch_match_claims()` (mid-tier batch proposal) + `verify_matches()` (high-tier adversarial verification)
 - `ingest/triage.py` — batch triage classifier: `triage_claims()` populates `triage_class`, `citation_expectation`, `importance` on all claims in one mid-tier call
-- `ingest/routing.py` — routing policy + route-handler registry: `decide_route()` (pure function, policy table), `execute_routing()` (dispatches to handlers), extensible for Phase 04+
+- `ingest/routing.py` — routing policy + route-handler registry: `decide_route()` (pure function, policy table), `execute_routing()` (dispatches to handlers); never-web row routes to corpus when available
+- `ingest/corpus_client.py` — HTTP client for doc-rag-backend (`api.ragtogo.com`): `search_corpus()`, `list_documents()`, `map_citations_to_document_ids()`; config from `[corpus_api]` in config.toml
+- `ingest/corpus_route.py` — corpus route handler: `make_corpus_route_handler(corpus_ids)` factory; search → Evidence wrap → summarize (mid) → route-local high-tier evaluation → `RouteVerdict(route="corpus")`
 - `ingest/gap_report.py` — gap report rendering: `assign_suggested_actions()`, `render_gap_report()`, `serialize_results()`
 - `claim_verifier/evidence_summarization.py` — evidence summarization: `summarize_evidence_for_claim()` condenses raw search results at mid tier before high-tier evaluation
 - `scripts/run_from_pdf.py` — CLI entry point for PDF/text/markdown fact-checking (light profile)
-- `scripts/run_heavy.py` — CLI entry point for heavy-profile runs: draft + vault → parse → extract → bind → vault verify → triage → route → gap report
+- `scripts/run_heavy.py` — CLI entry point for heavy-profile runs: draft + vault → parse → extract → bind → vault verify → triage → route → gap report; `--corpus-ids` for corpus scoping
 - `scripts/spot_check_vault.py` — live spot-check script for alignment + vault matching against real vault
 - `docs/playbook/claim-record-design.md` — attribute taxonomy and phase ownership for ClaimRecord
 - `docs/llm-providers.md` — tier × provider model mapping table
@@ -90,9 +92,10 @@ Draft (markdown with wikilinks) → parse_draft() → bind_citations() → [Clai
   → decide_route (pure function, policy table):
       vault-resolved (supported/contradicted) → no further routing
       trivial                                 → skip
-      novel-result / dataset-dependent        → never web (unverifiable until corpus route)
+      novel-result / dataset-dependent        → corpus (if corpus_ids declared), else unverifiable
       general-factual / academic-citable / unclassified → route to web
   → web route: search → summarize_evidence (mid tier) → evaluate_evidence (high tier)
+  → corpus route: search_corpus(scoped by document_ids) → summarize (mid) → evaluate (high, route-local)
   → render_gap_report() with triage, routing decisions, route summary
 ```
 
@@ -103,7 +106,8 @@ Full-vault fallback: claims unmatched by the paper-scoped batch pass get one add
 - Selection and disambiguation use 3 LLM completions with 2/3 majority voting. Do not reduce this — it is the primary quality mechanism.
 - Evidence evaluation (web and vault) uses the "high" tier (GPT-4.1 — OpenAI's smartest non-reasoning model, or Claude Sonnet 5 — Anthropic's frontier hybrid-reasoning model with selectable effort levels). Never downgrade this tier. See `docs/playbook/model-tier-selection.md` for rationale.
 - Vault batch matching: pass 1 (paper-scoped) uses "mid" tier; pass 2 (full-vault fallback) uses "high" tier. Each proposed match is re-verified at "high" tier adversarially. Batch-match prompts seek contradictions as well as confirmations.
-- Evidence summarization (mid tier) condenses raw search results before high-tier evaluation, preserving refuting content and URL attribution. Config-switchable (`summarize_evidence` in config.toml, default on).
+- Evidence summarization (mid tier) condenses raw search results before high-tier evaluation, preserving refuting content and URL attribution. Config-switchable (`summarize_evidence` in config.toml, default on). Reused by the corpus route for retrieved passages.
+- Corpus evidence evaluation uses a route-local high-tier evaluator (the web evaluator's `VerificationResult` enum cannot express `corpus_insufficient`). Verdicts: `corpus_supported`, `corpus_contradicted`, `corpus_insufficient`, `no_corpus_hits`.
 - Triage is conservative-up: unclassified claims route to web (never default to trivial); uncertain between never-web and web-verifiable → choose web-verifiable.
 - Up to 5 search iterations per claim if evidence is insufficient (web route only).
 
@@ -132,7 +136,7 @@ EXA_API_KEY=...
 REDIS_URI=redis://localhost:6379
 ```
 
-Optional: `TAVILY_API_KEY`, `LANGSMITH_API_KEY`, `OPENROUTER_API_KEY` (`sk-or-...`, required when `llm_provider=openrouter` in config.toml)
+Optional: `TAVILY_API_KEY`, `LANGSMITH_API_KEY`, `OPENROUTER_API_KEY` (`sk-or-...`, required when `llm_provider=openrouter` in config.toml), `RAG_API_KEY` (doc-rag-backend / api.ragtogo.com corpus search; required for corpus route)
 
 ## Conventions
 

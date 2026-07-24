@@ -140,6 +140,35 @@ def test_available_routes_empty_when_nothing_available():
     assert manifest.available_routes == []
 
 
+def test_available_routes_includes_corpus_when_corpus_ids_non_empty():
+    manifest = ResourceManifest(
+        draft_path="draft.md", web_enabled=False, corpus_ids=["doc-1"]
+    )
+    assert manifest.available_routes == ["corpus"]
+
+
+def test_available_routes_excludes_corpus_when_corpus_ids_none():
+    manifest = ResourceManifest(draft_path="draft.md")
+    assert "corpus" not in manifest.available_routes
+
+
+def test_available_routes_excludes_corpus_when_corpus_ids_empty_list():
+    manifest = ResourceManifest(draft_path="draft.md", corpus_ids=[])
+    assert "corpus" not in manifest.available_routes
+
+
+def test_available_routes_web_vault_and_corpus_all_present():
+    manifest = ResourceManifest(
+        draft_path="draft.md", vault_path="vault/", corpus_ids=["doc-1", "doc-2"]
+    )
+    assert manifest.available_routes == [
+        "web",
+        "vault_aligned",
+        "vault_matched",
+        "corpus",
+    ]
+
+
 def test_manifest_serialization_round_trip():
     manifest = ResourceManifest(
         draft_path="draft.md",

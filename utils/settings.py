@@ -38,6 +38,13 @@ def _validate_openrouter_api_key(v: str | None) -> str | None:
     return v
 
 
+def _validate_rag_api_key(v: str | None) -> str | None:
+    """Validate that the RAG API key is not empty or whitespace-only."""
+    if v is not None and not v.strip():
+        raise ValueError("RAG API key must not be empty or whitespace-only")
+    return v
+
+
 _ALLOWED_LLM_PROVIDERS = ("openai", "openrouter")
 
 
@@ -55,6 +62,7 @@ OpenAIAPIKey = Annotated[str | None, AfterValidator(_validate_openai_api_key)]
 ExaAPIKey = Annotated[str | None, AfterValidator(_validate_exa_api_key)]
 TavilyAPIKey = Annotated[str | None, AfterValidator(_validate_tavily_api_key)]
 OpenRouterAPIKey = Annotated[str | None, AfterValidator(_validate_openrouter_api_key)]
+RagAPIKey = Annotated[str | None, AfterValidator(_validate_rag_api_key)]
 LLMProvider = Annotated[str, AfterValidator(_validate_llm_provider)]
 
 
@@ -71,6 +79,7 @@ class Settings(BaseSettings):
     )
     exa_api_key: ExaAPIKey = Field(default=None, alias="EXA_API_KEY")
     tavily_api_key: TavilyAPIKey = Field(default=None, alias="TAVILY_API_KEY")
+    rag_api_key: RagAPIKey = Field(default=None, alias="RAG_API_KEY")
     redis_uri: RedisDsn = Field(default="redis://localhost:6379", alias="REDIS_URL")
 
     model_config = SettingsConfigDict(

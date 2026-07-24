@@ -18,6 +18,7 @@ _SETTINGS_ENV_VARS = [
     "EXA_API_KEY",
     "TAVILY_API_KEY",
     "REDIS_URL",
+    "RAG_API_KEY",
 ]
 
 
@@ -112,3 +113,34 @@ def test_openai_api_key_accepts_sk_proj_prefix():
 def test_openai_api_key_still_optional():
     settings = _make_settings()
     assert settings.openai_api_key is None
+
+
+# ---------------------------------------------------------------------------
+# RAG_API_KEY (TG 04.2.2 - doc-rag-backend corpus search client)
+# ---------------------------------------------------------------------------
+
+
+def test_rag_api_key_is_optional():
+    settings = _make_settings()
+    assert settings.rag_api_key is None
+
+
+def test_rag_api_key_accepts_normal_string():
+    settings = _make_settings(RAG_API_KEY="some-arbitrary-secret-value")
+    assert settings.rag_api_key == "some-arbitrary-secret-value"
+
+
+def test_rag_api_key_rejects_empty_string():
+    with pytest.raises(ValidationError):
+        _make_settings(RAG_API_KEY="")
+
+
+def test_rag_api_key_rejects_whitespace_only():
+    with pytest.raises(ValidationError):
+        _make_settings(RAG_API_KEY="   ")
+
+
+def test_rag_api_key_read_from_environment(monkeypatch):
+    monkeypatch.setenv("RAG_API_KEY", "from-env-secret")
+    settings = _make_settings()
+    assert settings.rag_api_key == "from-env-secret"

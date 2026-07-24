@@ -48,7 +48,8 @@ Wave-1 integration decisions (documented per TG 03.3 brief):
 
 Usage:
     poetry run python scripts/run_heavy.py DRAFT --vault PATH \
-        [--argument-pyramid NAME] [--profile heavy|light] [--no-web]
+        [--argument-pyramid NAME] [--profile heavy|light] [--no-web] \
+        [--corpus-ids d_dGI2Iuuk5sZ7,d_PRSnU1A3uq6r]
 """
 
 from __future__ import annotations
@@ -64,13 +65,14 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from claim_extractor import graph as claim_extractor_graph
 from ingest.citation_binder import bind_extracted_claims
+from ingest.corpus_route import make_corpus_route_handler
 from ingest.draft_parser import parse_draft
 from ingest.gap_report import (
     assign_suggested_actions,
     render_gap_report,
     serialize_results,
 )
-from ingest.routing import execute_routing
+from ingest.routing import ROUTE_HANDLERS, execute_routing
 from ingest.triage import triage_claims
 from ingest.vault_match import (
     VAULT_MATCH_FALLBACK_ENABLED,
@@ -254,7 +256,16 @@ async def run_pipeline(
 
     # --- Routing (web route executes here when the manifest allows) ---
     try:
-        await execute_routing(records, manifest, handlers=route_handlers, policy=policy)
+        handlers = route_handlers
+        if handlers is None and manifest.corpus_ids:
+            # Wiring contract documented in ingest/corpus_route.py's module
+            # docstring: base ROUTE_HANDLERS plus a "corpus" entry scoped to
+            # this manifest's corpus_ids. Only built when the caller hasn't
+            # already injected explicit handlers (test injection must keep
+            # working unchanged).
+            handlers = dict(ROUTE_HANDLERS)
+            handlers["corpus"] = make_corpus_route_handler(manifest.corpus_ids)
+        await execute_routing(records, manifest, handlers=handlers, policy=policy)
     except Exception as exc:  # noqa: BLE001
         record_failure("routing", exc)
 
@@ -352,7 +363,32 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--no-web", action="store_true", help="Disable the web route (vault only)"
     )
+    parser.add_argument(
+        "--corpus-ids",
+        default=None,
+        help=(
+            "Comma-separated doc-rag-backend document IDs to scope the corpus "
+            "route (e.g. d_dGI2Iuuk5sZ7,d_PRSnU1A3uq6r). Omit or leave blank to "
+            "disable the corpus route."
+        ),
+    )
     return parser.parse_args(argv)
+
+
+def _parse_corpus_ids(raw: Optional[str]) -> Optional[List[str]]:
+    """Parse ``--corpus-ids``'s comma-separated value into a list, or None.
+
+    Whitespace around entries is tolerated and empty entries are dropped
+    (a trailing comma, doubled comma, etc.). An absent, empty, or
+    whitespace/comma-only value is treated as "no corpus route": manifest
+    authority (``ResourceManifest.corpus_ids``) is what actually gates the
+    corpus route, so this must produce ``None`` -- not an empty list --
+    whenever nothing usable was provided.
+    """
+    if raw is None:
+        return None
+    ids = [part.strip() for part in raw.split(",") if part.strip()]
+    return ids or None
 
 
 def _build_manifest(args: argparse.Namespace) -> ResourceManifest:
@@ -390,6 +426,7 @@ def _build_manifest(args: argparse.Namespace) -> ResourceManifest:
         draft_path=draft_path,
         vault_path=vault_path,
         argument_pyramid=args.argument_pyramid if vault_path is not None else None,
+        corpus_ids=_parse_corpus_ids(args.corpus_ids),
         web_enabled=not args.no_web,
     )
 

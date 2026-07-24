@@ -493,6 +493,196 @@ async def test_vault_load_failure_recorded_run_continues():
 
 
 # ---------------------------------------------------------------------------
+# Corpus route wiring (TG 04.4.1)
+# ---------------------------------------------------------------------------
+
+SINGLE_CLAIM_TRIAGE = BatchTriageOutput(
+    classifications=[
+        TriageProposal(
+            claim_index=0,
+            triage_class="novel-result",
+            citation_expectation="not-expected",
+            importance=5,
+        ),
+    ]
+)
+
+
+def _corpus_manifest(corpus_ids=None):
+    return ResourceManifest(
+        draft_path=Path("draft.md"), web_enabled=True, corpus_ids=corpus_ids
+    )
+
+
+@pytest.mark.asyncio
+async def test_corpus_handler_added_when_manifest_has_corpus_ids_and_no_override():
+    """When the manifest declares corpus_ids and the caller passes no explicit
+    route_handlers, run_pipeline must build handlers per the documented
+    wiring contract (ingest/corpus_route.py module docstring): base
+    ROUTE_HANDLERS plus a "corpus" entry from make_corpus_route_handler,
+    scoped to the manifest's corpus_ids."""
+    manifest = _corpus_manifest(corpus_ids=["d_1", "d_2"])
+    extractor = _extractor([make_validated_claim("A novel result claim.", 0)])
+
+    sentinel_handler = object()
+    mock_factory = MagicMock(return_value=sentinel_handler)
+    mock_execute_routing = AsyncMock(side_effect=lambda records, manifest, handlers=None, policy=None: records)
+
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(run_heavy, "claim_extractor_graph", extractor))
+        stack.enter_context(patch.object(run_heavy, "make_corpus_route_handler", mock_factory))
+        stack.enter_context(patch.object(run_heavy, "execute_routing", mock_execute_routing))
+        stack.enter_context(patch("ingest.triage.get_llm", return_value=MagicMock()))
+        stack.enter_context(
+            patch(
+                "ingest.triage.call_llm_with_structured_output",
+                new=AsyncMock(return_value=SINGLE_CLAIM_TRIAGE),
+            )
+        )
+        await run_pipeline("A novel result claim.", manifest)
+
+    mock_factory.assert_called_once_with(["d_1", "d_2"])
+    _, kwargs = mock_execute_routing.call_args
+    assert kwargs["handlers"]["corpus"] is sentinel_handler
+    assert "web" in kwargs["handlers"]  # base ROUTE_HANDLERS preserved, not replaced
+
+
+@pytest.mark.asyncio
+async def test_corpus_handler_absent_when_manifest_corpus_ids_none():
+    """No corpus_ids on the manifest -> no corpus handler built, and the
+    default handlers (None, meaning execute_routing falls back to the
+    module-level ROUTE_HANDLERS) pass through untouched."""
+    manifest = _corpus_manifest(corpus_ids=None)
+    extractor = _extractor([make_validated_claim("A novel result claim.", 0)])
+
+    mock_factory = MagicMock()
+    mock_execute_routing = AsyncMock(side_effect=lambda records, manifest, handlers=None, policy=None: records)
+
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(run_heavy, "claim_extractor_graph", extractor))
+        stack.enter_context(patch.object(run_heavy, "make_corpus_route_handler", mock_factory))
+        stack.enter_context(patch.object(run_heavy, "execute_routing", mock_execute_routing))
+        stack.enter_context(patch("ingest.triage.get_llm", return_value=MagicMock()))
+        stack.enter_context(
+            patch(
+                "ingest.triage.call_llm_with_structured_output",
+                new=AsyncMock(return_value=SINGLE_CLAIM_TRIAGE),
+            )
+        )
+        await run_pipeline("A novel result claim.", manifest)
+
+    mock_factory.assert_not_called()
+    _, kwargs = mock_execute_routing.call_args
+    assert kwargs["handlers"] is None
+
+
+@pytest.mark.asyncio
+async def test_corpus_handler_absent_when_manifest_corpus_ids_empty_list():
+    """An empty corpus_ids list is falsy -> treated the same as None (no
+    corpus handler, no route)."""
+    manifest = _corpus_manifest(corpus_ids=[])
+    extractor = _extractor([make_validated_claim("A novel result claim.", 0)])
+
+    mock_factory = MagicMock()
+    mock_execute_routing = AsyncMock(side_effect=lambda records, manifest, handlers=None, policy=None: records)
+
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(run_heavy, "claim_extractor_graph", extractor))
+        stack.enter_context(patch.object(run_heavy, "make_corpus_route_handler", mock_factory))
+        stack.enter_context(patch.object(run_heavy, "execute_routing", mock_execute_routing))
+        stack.enter_context(patch("ingest.triage.get_llm", return_value=MagicMock()))
+        stack.enter_context(
+            patch(
+                "ingest.triage.call_llm_with_structured_output",
+                new=AsyncMock(return_value=SINGLE_CLAIM_TRIAGE),
+            )
+        )
+        await run_pipeline("A novel result claim.", manifest)
+
+    mock_factory.assert_not_called()
+    _, kwargs = mock_execute_routing.call_args
+    assert kwargs["handlers"] is None
+
+
+@pytest.mark.asyncio
+async def test_explicit_route_handlers_override_respected_even_with_corpus_ids():
+    """Test injection must keep working: if the caller passes explicit
+    route_handlers, run_pipeline must use them unchanged -- no corpus
+    handler merged in -- even though the manifest declares corpus_ids."""
+    manifest = _corpus_manifest(corpus_ids=["d_1"])
+    extractor = _extractor([make_validated_claim("A novel result claim.", 0)])
+
+    explicit_handlers = {"web": stub_web_handler}
+    mock_factory = MagicMock()
+    mock_execute_routing = AsyncMock(side_effect=lambda records, manifest, handlers=None, policy=None: records)
+
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(run_heavy, "claim_extractor_graph", extractor))
+        stack.enter_context(patch.object(run_heavy, "make_corpus_route_handler", mock_factory))
+        stack.enter_context(patch.object(run_heavy, "execute_routing", mock_execute_routing))
+        stack.enter_context(patch("ingest.triage.get_llm", return_value=MagicMock()))
+        stack.enter_context(
+            patch(
+                "ingest.triage.call_llm_with_structured_output",
+                new=AsyncMock(return_value=SINGLE_CLAIM_TRIAGE),
+            )
+        )
+        await run_pipeline(
+            "A novel result claim.", manifest, route_handlers=explicit_handlers
+        )
+
+    mock_factory.assert_not_called()
+    _, kwargs = mock_execute_routing.call_args
+    assert kwargs["handlers"] is explicit_handlers
+
+
+# ---------------------------------------------------------------------------
+# --corpus-ids CLI parsing (TG 04.4.1)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        (None, None),
+        ("", None),
+        ("   ", None),
+        (",,", None),
+        ("d_1,d_2", ["d_1", "d_2"]),
+        (" d_1 , d_2 ", ["d_1", "d_2"]),
+        ("d_1,,d_2", ["d_1", "d_2"]),
+        ("d_1", ["d_1"]),
+    ],
+)
+def test_parse_corpus_ids(raw, expected):
+    assert run_heavy._parse_corpus_ids(raw) == expected
+
+
+def test_build_manifest_sets_corpus_ids_from_cli(tmp_path):
+    draft = tmp_path / "draft.md"
+    draft.write_text("Some draft text.", encoding="utf-8")
+    args = run_heavy._parse_args([str(draft), "--corpus-ids", "d_1, d_2"])
+    manifest = run_heavy._build_manifest(args)
+    assert manifest.corpus_ids == ["d_1", "d_2"]
+
+
+def test_build_manifest_corpus_ids_absent_flag_is_none(tmp_path):
+    draft = tmp_path / "draft.md"
+    draft.write_text("Some draft text.", encoding="utf-8")
+    args = run_heavy._parse_args([str(draft)])
+    manifest = run_heavy._build_manifest(args)
+    assert manifest.corpus_ids is None
+
+
+def test_build_manifest_corpus_ids_whitespace_only_is_none(tmp_path):
+    draft = tmp_path / "draft.md"
+    draft.write_text("Some draft text.", encoding="utf-8")
+    args = run_heavy._parse_args([str(draft), "--corpus-ids", "   "])
+    manifest = run_heavy._build_manifest(args)
+    assert manifest.corpus_ids is None
+
+
+# ---------------------------------------------------------------------------
 # write_outputs
 # ---------------------------------------------------------------------------
 

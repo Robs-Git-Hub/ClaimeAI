@@ -239,3 +239,109 @@ touch exactly two things:
 Neither the orchestrator, the gap report, nor `ClaimRecord` should need
 to change. This is proven by `tests/test_routing.py`'s extensibility
 test, which registers a fake route with exactly this shape.
+
+---
+
+## Corpus Route (Phase 04, TG 04.3)
+
+*Appended by the TG 04.3 session — see `ingest/corpus_route.py`,
+`ingest/corpus_client.py` (TG 04.2.1), and
+`project-management/phase-plans/phase-04-*.md`.*
+
+`"corpus"` is now a real, registered verification route (previously
+anticipated in the `never-web` policy row's comment). It verifies claims the
+routing policy keeps away from web search (triage classes `novel-result`,
+`dataset-dependent`) against the author's own ingested paper corpus
+(doc-rag-backend, `https://api.ragtogo.com`), when the run's
+`ResourceManifest.corpus_ids` is non-empty.
+
+### CorpusVerdict
+
+Route-specific verdicts for corpus-based verification. Separate from
+`VaultVerdict` (vault-route-specific) and `VerificationResult`
+(web-route-specific) — see `RouteVerdict.verdict`.
+
+| Value | Meaning |
+|-------|---------|
+| `corpus_supported` | Corpus evidence clearly supports the claim. |
+| `corpus_contradicted` | Corpus evidence clearly contradicts the claim. |
+| `corpus_insufficient` | Corpus evidence was retrieved but doesn't address the claim closely enough to judge either way. |
+| `no_corpus_hits` | The corpus search returned no chunks at all (recorded without an LLM call, mirroring `VaultVerdict.NOTE_NOT_IN_VAULT`/`INSUFFICIENT_VAULT_CONTENT` — "we looked and found nothing" is itself useful audit trail, distinct from "we couldn't look"). |
+
+`RouteVerdict` for the corpus route: `route="corpus"`, `verdict=<CorpusVerdict
+value>`, `reasoning=<from the route-local high-tier evaluation>`,
+`provenance=<"document_id#chunk_id"` refs, comma-joined, one per matched
+chunk, with section names appended when known`>`, `provenance_type=
+"corpus_doc_id"`. `RouteVerdict.provenance_type`'s docstring now lists
+`"corpus_doc_id"` alongside `"vault_note"`, `"quote_note"`, `"web_url"`.
+
+### Pipeline
+
+```
+[claim routed to "corpus" (never-web triage class + corpus_ids available)]
+  → search_corpus(claim_text, document_ids=corpus_ids)   (ingest/corpus_client.py)
+      None (API down)         → handler returns None, no verdict, run continues
+      no chunks               → RouteVerdict(verdict=no_corpus_hits), no LLM call
+      chunks found            → wrap as Evidence(url="corpus://<doc_id>#<chunk_id>", ...)
+  → summarize_evidence_for_claim (mid tier, config-gated, reused unmodified
+    from claim_verifier/evidence_summarization.py — already evidence-source-agnostic)
+  → route-local high-tier evaluation (ingest/corpus_route.py:_evaluate_corpus_evidence)
+  → RouteVerdict(route="corpus", verdict=<corpus_supported|corpus_contradicted|corpus_insufficient>)
+```
+
+### Evaluation reuse decision
+
+The corpus route does **not** call `claim_verifier.nodes.evaluate_evidence`.
+That node's structured-output verdict field is typed
+`claim_verifier.schemas.VerificationResult`, whose enum only actually
+contains `Supported`/`Refuted` (`Insufficient Information` is commented out
+of the enum even though the prompt text still describes it) — it cannot
+represent the `corpus_insufficient` value this route's fixed vocabulary
+requires, without editing `claim_verifier/schemas.py` (out of scope this
+phase; compose, don't modify). Instead, `ingest/corpus_route.py` writes a
+small, route-local high-tier evaluator following the house style of
+`ingest/alignment.py:evaluate_alignment` (`get_llm(tier="high")` +
+`with_structured_output`). Summarization is still reused unmodified from
+`claim_verifier/evidence_summarization.py` and runs exactly once per claim,
+before the route-local evaluation call — never twice.
+
+### Manifest scoping
+
+`RouteHandler` (the protocol in `ingest/routing.py`) is `async (record) ->
+Optional[RouteVerdict]` — it has no way to receive `manifest.corpus_ids`
+directly, and `execute_routing`'s signature is not changed to thread it
+through. `ingest/corpus_route.py` exposes a **factory**,
+`make_corpus_route_handler(corpus_ids)`, that closes over the document-id
+scope and returns a `RouteHandler`. There is no module-level
+`ROUTE_HANDLERS["corpus"]` entry (unlike `web_route_handler`) — a corpus
+handler is meaningless without knowing which documents to search. The
+orchestrator (TG 04.4, `scripts/run_heavy.py`) is expected to wire it as:
+
+```python
+from ingest.corpus_route import make_corpus_route_handler
+from ingest.routing import ROUTE_HANDLERS, execute_routing
+
+handlers = dict(ROUTE_HANDLERS)
+if manifest.corpus_ids:
+    handlers["corpus"] = make_corpus_route_handler(manifest.corpus_ids)
+records = await execute_routing(records, manifest, handlers=handlers)
+```
+
+### Policy table update
+
+The `never-web` row's `candidate_routes` changed from `()` to `("corpus",)`
+— the one-line change TG 03.2 anticipated. The `general` (catch-all) row —
+covering `general-factual`, `academic-citable`, and unclassified claims —
+is **unchanged** this phase: it still only offers `"web"`. This is a
+deliberate scope line, not an oversight: house policy from Phase 03 already
+routes web-eligible claims to web; corpus is scoped this phase to claims web
+categorically cannot verify (`novel-result`, `dataset-dependent`). Whether
+web-eligible claims should *also* get a corpus lookup (e.g. as a secondary
+or fallback source) is left for a later phase to decide.
+
+`_unverifiable_reason` (in `ingest/routing.py`) was adjusted so that its
+non-empty-`candidate_routes` branch also names the record's `triage_class`,
+not just the excluded candidate route(s) — needed once the `never-web` row
+moved from the empty-`candidate_routes` branch to the non-empty one, and
+kept both existing reason-string assertions in `tests/test_routing.py`
+passing unchanged.
