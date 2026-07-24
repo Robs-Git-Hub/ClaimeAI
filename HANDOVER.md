@@ -82,10 +82,11 @@ All present: `OPENAI_API_KEY` (sk-proj-, **OUT OF CREDIT as of Session 5** — t
 25. **One-hop traversal for evidence gathering** (Session 7, user decision). For each cited note, gather the note's own body content PLUS the content of notes it directly links to (one hop). Deeper traversal has diminishing returns and token cost.
 26. **VaultVerdict renamed: SOURCE_NOT_IN_VAULT → NOTE_NOT_IN_VAULT** (Session 7). Generalized to match the any-wikilink-type design.
 27. **AlignmentOutput.verdict uses Literal, not VaultVerdict enum** (Session 7, /simplify review). The LLM should only return 3 of VaultVerdict's 6 values; Literal constrains the structured output correctly.
+28. **Full-vault fallback for cited-note lookup** (Session 7, user-reported bug). `evaluate_alignment()` accepts an optional `full_vault_by_name` (unfiltered vault) as fallback when a cited note isn't in the argument_pyramid-filtered vault. Eliminates false `note_not_in_vault` for notes that exist but aren't pyramid-tagged. Filtered vault is still used for TG 02.5 batch matching (appropriate — batch matching should scope to the paper).
 
 ### Test suite
 
-243 tests total (240 pass with `-m "not slow"`, 3 slow tests deselected).
+245 tests total (242 pass with `-m "not slow"`, 3 slow tests deselected).
 
 | File | Count | Covers |
 |------|-------|--------|
@@ -99,7 +100,7 @@ All present: `OPENAI_API_KEY` (sk-proj-, **OUT OF CREDIT as of Session 5** — t
 | test_draft_parser.py | 25 | Wikilink parsing, stripping, author-year detection, sentence splitting, ParsedDraft |
 | test_citation_binder.py | 15 | Citation binding via original_index, union semantics, decomposition survival |
 | test_vault_serializer.py | 24 | Vault note parsing, filtering, serialization, token counting (22 narrow + 2 slow live vault) |
-| test_alignment.py | 20 | gather_evidence (8), evaluate_alignment (12, async with mocked LLM) |
+| test_alignment.py | 22 | gather_evidence (8), evaluate_alignment (12 + 2 fallback, async with mocked LLM) |
 | test_vault_match.py | 14 | batch_match_claims (5), verify_matches (9, async with mocked LLM) |
 | test_gap_report.py | 14 | assign_suggested_actions (7), render_gap_report (5), serialize_results (2) |
 | test_ingest.py (slow) | 1 | Docling PDF extraction (~16s) |
@@ -134,4 +135,4 @@ All present: `OPENAI_API_KEY` (sk-proj-, **OUT OF CREDIT as of Session 5** — t
 | 2026-07-23 | Session 4: Emoji fix in dev.py, design discussion on academic verification scope, Phase 02 plan written, first full academic paper PDF test (448 claims, $10 cost with analysis). |
 | 2026-07-23 | Session 5: Phase 01 closed (01.5.3 /claimify skill e2e test passed via OpenRouter after OpenAI 429). Phase 02 approved. Standard dev test file established. Vault corrections: 98->93 across 9 notes with [sic] on de Carvalho source notes; 12th->11th ESS in commission brief with rerun warning. 4 commits. |
 | 2026-07-23 | Session 6: Phase 02 TGs 02.1–02.3 implemented. Data models (ClaimRecord, ResourceManifest, RunProfile), draft parsing + citation binding, vault serializer with live vault validation. 107 new tests (195 total). CLAUDE.md key files updated. |
-| 2026-07-23 | Session 7: Phase 02 TGs 02.4–02.6 implemented. Cited-claim alignment (any wikilink type + one-hop traversal), citation-free vault matching (mid-tier batch + high-tier verify), gap report with suggested actions. Live spot-check passed (OpenRouter). Design corrections: any-wikilink-type, one-hop traversal, NOTE_NOT_IN_VAULT rename. 48 new tests (243 total). |
+| 2026-07-23 | Session 7: Phase 02 TGs 02.4–02.6 implemented. Cited-claim alignment (any wikilink type + one-hop traversal + full-vault fallback), citation-free vault matching (mid-tier batch + high-tier verify), gap report with suggested actions. Live spot-check passed (OpenRouter): all 7 cited notes vault_supported, 9/15 citation-free matched, gap report rendered. Design corrections: any-wikilink-type, one-hop traversal, NOTE_NOT_IN_VAULT rename, full-vault fallback. 50 new tests (245 total). 3 commits. |
