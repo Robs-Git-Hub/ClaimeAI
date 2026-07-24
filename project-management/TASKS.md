@@ -115,7 +115,7 @@ Acceptance criteria for TG 01.6:
 
 ---
 
-## Phase 02: Vault Verification Core — APPROVED (user sign-off Session 5)
+## Phase 02: Vault Verification Core — COMPLETE (Session 8)
 
 Plan: `phase-plans/phase-02-vault-verification-core.md` (supersedes the old "Argument Chain Verification" Phase 02 — chain-completeness checking moved to the edge-case backlog; design decisions from Session 4 recorded in the plan's Design pillars).
 
@@ -198,16 +198,41 @@ Assigns `suggested_action` from verdicts; renders per-claim details with provena
 
 ### TG 02.7: Quality & Wrap
 
-- [ ] 02.7.1 MILESTONE: heavy run over ukraine working paper → gap report judged useful by user (spot-check passed in 02.4.4/02.5.4; full run deferred to user decision on API credit)
+- [x] 02.7.1 MILESTONE: accepted via spot-check (user decision, Session 8) — the 02.4.4/02.5.4 live run exercised all code paths (alignment, matching, gap report) across 4 note types and both cited/citation-free flows; full-paper run judged unnecessary. Scale behavior (~450-claim batch matching) remains untested — acceptable risk, can run post-hoc if needed.
 - [x] 02.7.2 Light-run regression: gap report with no vault → Phase 01-compatible output — verified by `test_report_no_vault_section_when_no_vault` (omits vault sections, shows "not configured")
-- [ ] 02.7.3 Update CLAUDE.md key files with new modules; update HANDOVER.md; push to origin
+- [x] 02.7.3 Update CLAUDE.md key files with new modules (Session 7); `docs-align-check` ran clean (Session 8: 46 paths verified, test counts match, no drift); HANDOVER.md updated and pushed (Session 8)
 
 ---
 
-## Phases 03–05: Roadmap — FUTURE
+## Phase 03: Triage & Routing — APPROVED (user sign-off Session 8)
 
-- **Phase 03 — Routing & Corpus:** triage classifier, web route reuse, doc-rag-backend client (api.ragtogo.com, `document_ids` scoping), routing policy for no-vault-match claims
-- **Phase 04 — Deep Research Commissions:** human-approved escalation, commission writer, response-paper ingestion + re-evaluation
-- **Phase 05 — Draft Update Loop:** propose citation-inserting draft edits after vault improvement
+Plan: `phase-plans/phase-03-triage-and-routing.md`. Corpus RAG split out to Phase 04 (user decision, Session 8); router built as an extension point so Phase 04 and future routes (specialist DB searches) are additive. Web spend triage-gated. Milestone: routed heavy run on `workspace/inbox/ukraine-intro-test.txt`.
 
-**Edge-case backlog:** PDF-only drafts / plain-text citation parsing; source fetching for absent papers; vault-less heavy runs; vault QA / chain completeness (old Phase 02 concept); semi-automated vault enrichment
+### TG 03.1: Triage Classifier
+
+- [ ] 03.1.x Triage vocabulary documented in claim-record-design.md; batch classification (mid tier or below) populates triage_class / citation_expectation / importance; conservative-up on uncertainty; offline tests + characterized-file expectations (3 dataset-dependent claims classified as such)
+
+### TG 03.2: Routing Policy and Route Registry
+
+- [ ] 03.2.x Pure routing function (ClaimRecord × available_routes → decision), route-handler interface with web route as first implementation (per-claim claim_verifier reuse); extensibility proof test (fake route = stub handler + manifest declaration + policy-table row); routing table reviewed by user before milestone
+
+### TG 03.3: Orchestration and Report Extension
+
+- [ ] 03.3.x Production heavy-run entry point (parse → extract → bind → vault verify → triage → route → web) replacing spot-check demo wiring; gap report gains triage class, route taken, cost/route summary; manifest-adaptive sections; light-profile regression
+
+### TG 03.4: Quality & Wrap
+
+- [ ] 03.4.1 MILESTONE: routed heavy run on ukraine-intro-test.txt — 3 dataset-dependent claims route away from web; report judged useful by user
+- [ ] 03.4.2 Light-profile regression; offline suite green; docs-align-check; CLAUDE.md/claim-record-design.md/TASKS.md/HANDOVER.md current; push to origin
+
+Task breakdown within each TG is the implementing session's job (plan defines goals/success criteria/constraints; see activity-planning skill).
+
+---
+
+## Phases 04–06: Roadmap — FUTURE
+
+- **Phase 04 — Corpus RAG Route:** doc-rag-backend as evidence route. First-client discovery of api.ragtogo.com (we own both repos, sole users — record client needs: DB content visibility, search by author+title/DOI/Zotero ref, API help/docs; improvements via direct edit + redeploy to Hetzner, or cross-repo communication note actioned by an agent in the doc-rag-backend repo; must not degrade other potential clients). Then client: `GET /search` scoped by `manifest.corpus_ids`, `"corpus"` route registered, high-tier evidence evaluation with document-id provenance.
+- **Phase 05 — Deep Research Commissions:** human-approved escalation, commission writer, response-paper ingestion + re-evaluation
+- **Phase 06 — Draft Update Loop:** propose citation-inserting draft edits after vault improvement
+
+**Edge-case backlog:** PDF-only drafts / plain-text citation parsing; source fetching for absent papers; vault-less heavy runs; vault QA / chain completeness (verify vault notes against original sources — separate domain from draft-claim verification, likely reuses doc-rag-backend); semi-automated vault enrichment

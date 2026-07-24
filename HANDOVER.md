@@ -1,30 +1,30 @@
 # Session Handover
 
-**Last Updated:** 2026-07-23 (Session 7, outgoing)
-**Current Status:** Phase 02 NEAR COMPLETE — TGs 02.1–02.6 done, TG 02.7 partially done (milestone run pending user review).
+**Last Updated:** 2026-07-24 (Session 8, outgoing)
+**Current Status:** Phase 02 COMPLETE. Phase 03 (Triage & Routing) APPROVED — ready for implementation.
 
 ---
 
 ## Start Here
 
-**Outgoing session completed:** TGs 02.4–02.6 of Phase 02 (cited-claim alignment, citation-free vault matching, gap report). 48 new tests (240 total offline, all green). Live spot-check passed via OpenRouter (13 API calls). Two design corrections applied: (1) any wikilink type is a citation target, not just SOURCE notes; (2) one-hop traversal for evidence gathering.
+**Outgoing session completed:** Phase 02 closed (milestone accepted via spot-check — user judged the full-paper run unnecessary; `docs-align-check` ran clean: 46 paths verified, test counts match, zero drift). Phase 03 planned, restructured after user design review, and approved.
 
 **Incoming session should:**
 
-1. **Complete TG 02.7.1 — the phase milestone.** Run the full ukraine working paper through the vault verification pipeline and produce a gap report for user review. The spot-check (02.4.4/02.5.4) covered the test excerpt (7 wikilinks, 20 sentences); the milestone requires the full paper (~7,000 words, ~450 claims). Use `scripts/spot_check_vault.py` as a template — extend it to process the full draft at `../ukraine-vote-analysis/vault-main/v-research/MS-DRAFT-working-paper-ukraine-vote-analysis-v2-full-text.md`. This costs API credit (OpenRouter; OpenAI is still out of credit).
+1. **Read the Phase 03 plan first:** `project-management/phase-plans/phase-03-triage-and-routing.md`. Four TGs: 03.1 triage classifier (batch, mid tier or below, conservative-up), 03.2 routing policy + route registry (pure function, route-handler interface, extensibility proof test), 03.3 orchestration + report extension (production heavy-run entry point — pays down the spot-check-script integration debt), 03.4 quality & wrap.
 
-2. **User judgment is the acceptance gate.** The gap report must be "judged useful" by the user. Present the rendered report and ask for sign-off.
+2. **Start with TG 03.1 and/or 03.2** — they are independent (03.1 is LLM vocabulary + batch classification; 03.2 is pure-code routing). Task breakdown within TGs is the implementing session's job.
 
-3. **Run `docs-align-check` before closing Phase 02.** This was specified in the phase plan but not executed in the outgoing session.
+3. **Two user-review gates before the milestone:** the routing table (which triage class × citation status → which route) must be reviewed by the user before the milestone run (TG 03.2 constraint); the milestone report itself is the acceptance gate (TG 03.4).
 
-4. **After Phase 02 closes, begin Phase 03 planning** (Routing & Corpus — triage classifier, web route reuse, doc-rag-backend client).
+4. **Milestone is the standard test file only** (`workspace/inbox/ukraine-intro-test.txt`) — success = the 3 dataset-dependent claims route away from web. Full-paper runs are post-phase optional, user-triggered.
 
-**What was NOT done:**
-- `docs-align-check` — skipped (time constraint)
-- Full-paper milestone run — deferred (requires user decision on API spend)
-- Pipeline integration — TG 02.4/02.5/02.6 functions are standalone; they're not yet wired into the LangGraph pipeline or `scripts/run_from_pdf.py`. The spot-check script (`scripts/spot_check_vault.py`) demonstrates end-to-end usage but isn't production wiring.
+**Scope boundaries (user decisions, Session 8 — do not re-litigate):**
+- **Corpus RAG (doc-rag-backend) is Phase 04, not Phase 03.** Phase 03 must make the router extensible (routes additive via registry + policy table), validated by a fake-route test. The Phase 04 roadmap entry in the phase plan carries the full first-client directive for api.ragtogo.com — read it before planning Phase 04.
+- **Web is triage-gated.** Trivial and novel-result/dataset-dependent claims never hit web search.
+- **Vault QA** (verifying vault notes against original sources) stays on the backlog — separate domain from draft-claim verification.
 
-**Phase plan:** `project-management/phase-plans/phase-02-vault-verification-core.md` (status: IN PROGRESS — TG 02.7 remaining)
+**Phase plans:** `phase-02-vault-verification-core.md` (COMPLETE), `phase-03-triage-and-routing.md` (APPROVED)
 
 ---
 
@@ -83,6 +83,11 @@ All present: `OPENAI_API_KEY` (sk-proj-, **OUT OF CREDIT as of Session 5** — t
 26. **VaultVerdict renamed: SOURCE_NOT_IN_VAULT → NOTE_NOT_IN_VAULT** (Session 7). Generalized to match the any-wikilink-type design.
 27. **AlignmentOutput.verdict uses Literal, not VaultVerdict enum** (Session 7, /simplify review). The LLM should only return 3 of VaultVerdict's 6 values; Literal constrains the structured output correctly.
 28. **Full-vault fallback for cited-note lookup** (Session 7, user-reported bug). `evaluate_alignment()` accepts an optional `full_vault_by_name` (unfiltered vault) as fallback when a cited note isn't in the argument_pyramid-filtered vault. Eliminates false `note_not_in_vault` for notes that exist but aren't pyramid-tagged. Filtered vault is still used for TG 02.5 batch matching (appropriate — batch matching should scope to the paper).
+29. **Phase 02 milestone accepted via spot-check** (Session 8, user decision). The 02.4.4/02.5.4 live run exercised all code paths; full-paper run judged unnecessary. Scale behavior (~450-claim batch matching in one context) remains untested — known, accepted risk.
+30. **Corpus RAG split out to Phase 04** (Session 8, user decision). Phase 03 = triage + routing + web reuse + orchestration only. The router must be an extension point: routes declared by manifest, handlers share a common interface, policy consults capabilities — adding a route touches only the registry and policy table. Future routes beyond corpus: specialist DB searches via API.
+31. **Web route is triage-gated** (Session 8, user decision). Web search runs only for triage-passed claims; trivial and novel-result/dataset-dependent claims never hit web.
+32. **First-client principle for doc-rag-backend** (Session 8, user directive — recorded in Phase 04 roadmap entry). We own both repos, sole users. Phase 04 approaches api.ragtogo.com as its first genuine client, records client needs, and feeds improvements back via direct edit + redeploy (Hetzner) or a cross-repo communication note actioned by an agent in the doc-rag-backend repo. Improvements must not degrade other potential clients. Backend facts: live on Hetzner, likely test + prod DBs, some ukraine sources probably ingested (unconfirmed).
+33. **Phase 03 milestone = standard test file** (Session 8, user decision). `ukraine-intro-test.txt` routed heavy run; full-paper runs post-phase optional.
 
 ### Test suite
 
@@ -136,3 +141,4 @@ All present: `OPENAI_API_KEY` (sk-proj-, **OUT OF CREDIT as of Session 5** — t
 | 2026-07-23 | Session 5: Phase 01 closed (01.5.3 /claimify skill e2e test passed via OpenRouter after OpenAI 429). Phase 02 approved. Standard dev test file established. Vault corrections: 98->93 across 9 notes with [sic] on de Carvalho source notes; 12th->11th ESS in commission brief with rerun warning. 4 commits. |
 | 2026-07-23 | Session 6: Phase 02 TGs 02.1–02.3 implemented. Data models (ClaimRecord, ResourceManifest, RunProfile), draft parsing + citation binding, vault serializer with live vault validation. 107 new tests (195 total). CLAUDE.md key files updated. |
 | 2026-07-23 | Session 7: Phase 02 TGs 02.4–02.6 implemented. Cited-claim alignment (any wikilink type + one-hop traversal + full-vault fallback), citation-free vault matching (mid-tier batch + high-tier verify), gap report with suggested actions. Live spot-check passed (OpenRouter): all 7 cited notes vault_supported, 9/15 citation-free matched, gap report rendered. Design corrections: any-wikilink-type, one-hop traversal, NOTE_NOT_IN_VAULT rename, full-vault fallback. 50 new tests (245 total). 3 commits. |
+| 2026-07-24 | Session 8: Phase 02 CLOSED (milestone accepted via spot-check, docs-align-check clean — zero drift). Phase 03 planned via Fable orchestration (3 Haiku explore agents: data contract, doc-rag-backend knowledge, web-route reuse surface), restructured after user design review (corpus RAG → Phase 04; router extensibility requirement added), approved. Roadmap renumbered: 04 corpus RAG (with first-client directive), 05 deep research, 06 draft update loop. No code changes. |

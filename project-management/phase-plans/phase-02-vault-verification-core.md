@@ -1,6 +1,6 @@
 # Phase 02: Vault Verification Core
 
-**Status:** APPROVED (user sign-off Session 5, 2026-07-23) — ready for implementation
+**Status:** COMPLETE (Session 8, 2026-07-24) — milestone accepted via the TG 02.4.4/02.5.4 live spot-check (user decision, Session 8); the full-paper run was judged unnecessary since the spot-check exercised all code paths. `docs-align-check` ran clean Session 8.
 **Goal:** Verify a markdown draft with wikilink citations against its trusted Obsidian vault — the best-case scenario for academic claim verification. Produce a gap report that tells the author what is supported, what is miscited, and where the vault is thin.
 
 ---
