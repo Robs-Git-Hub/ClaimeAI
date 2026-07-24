@@ -34,7 +34,7 @@ class VaultVerdict(str, Enum):
     VAULT_SUPPORTED = "vault_supported"
     VAULT_CONTRADICTED = "vault_contradicted"
     NOT_SUPPORTED = "not_supported"
-    SOURCE_NOT_IN_VAULT = "source_not_in_vault"
+    NOTE_NOT_IN_VAULT = "note_not_in_vault"
     INSUFFICIENT_VAULT_CONTENT = "insufficient_vault_content"
     NO_VAULT_MATCH = "no_vault_match"
 
@@ -106,7 +106,8 @@ class ClaimRecord(BaseModel):
         description="Whether the claim has a parseable citation"
     )
     cite_set: List[str] = Field(
-        default_factory=list, description="SOURCE note names from wikilink citations"
+        default_factory=list,
+        description="Vault note names from wikilink citations (any type)",
     )
     position: Optional[DraftPosition] = Field(
         default=None, description="Location of the claim in the draft"

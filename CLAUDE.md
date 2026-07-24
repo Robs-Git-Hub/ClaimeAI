@@ -47,7 +47,11 @@ This fork strips the original to the agent backend only (no web frontend, no Chr
 - `ingest/vault_serializer.py` — parses Obsidian vault notes, filters by argument_pyramid/type, serializes to JSON with token counting
 - `utils/claim_record.py` — ClaimRecord (Phase 02–05 data contract), CitationStatus, VaultVerdict, SuggestedAction, DraftPosition, RouteVerdict
 - `utils/run_config.py` — ResourceManifest (declares evidence sources per run), RunProfile (light/heavy)
+- `ingest/alignment.py` — cited-claim alignment: `gather_evidence()` (one-hop vault traversal) + `evaluate_alignment()` (high-tier LLM evaluation)
+- `ingest/vault_match.py` — citation-free vault matching: `batch_match_claims()` (mid-tier batch proposal) + `verify_matches()` (high-tier adversarial verification)
+- `ingest/gap_report.py` — gap report rendering: `assign_suggested_actions()`, `render_gap_report()`, `serialize_results()`
 - `scripts/run_from_pdf.py` — CLI entry point for PDF/text/markdown fact-checking
+- `scripts/spot_check_vault.py` — live spot-check script for alignment + vault matching against real vault
 - `docs/playbook/claim-record-design.md` — attribute taxonomy and phase ownership for ClaimRecord
 - `docs/llm-providers.md` — tier × provider model mapping table
 - `docs/websearch-and-costs.md` — Exa/Tavily and LLM cost estimates

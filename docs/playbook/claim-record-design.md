@@ -36,9 +36,9 @@ Route-specific verdicts for vault-based verification. Separate from `Verificatio
 |-------|-------|---------|
 | `vault_supported` | aligned / matched | Vault evidence supports the claim |
 | `vault_contradicted` | aligned / matched | Vault evidence contradicts the claim |
-| `not_supported` | aligned | Cite exists but quotes don't back the claim (the miscite signal) |
-| `source_not_in_vault` | aligned | Cited SOURCE note not found in vault |
-| `insufficient_vault_content` | aligned | SOURCE exists but has no extracted QUOTE notes |
+| `not_supported` | aligned | Cite exists but evidence doesn't back the claim (the miscite signal) |
+| `note_not_in_vault` | aligned | Cited note not found in vault |
+| `insufficient_vault_content` | aligned | Note exists but has no evidence children within one hop |
 | `no_vault_match` | matched | No vault note matches; handed off to Phase 03 routing |
 
 ### SuggestedAction

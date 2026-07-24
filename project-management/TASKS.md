@@ -161,27 +161,46 @@ Vault at `../ukraine-vote-analysis/vault-main/v-research/` (448 notes, 116 with 
 
 ### TG 02.4: Cited-Claim Alignment
 
-- [ ] 02.4.1 Resolve cite set → SOURCE → QUOTE/PARA notes; evaluate support at `high` tier
-- [ ] 02.4.2 Verdicts: supported (provenance) / not-supported (miscite) / source-not-in-vault / insufficient-vault-content
-- [ ] 02.4.3 Live spot-check on real draft claims
+Architecture: cited note (any type) + one-hop linked notes → high-tier LLM alignment evaluation.
+New files: `ingest/alignment.py`, `tests/test_alignment.py`.
+Test file: `workspace/inbox/ukraine-rich-wikilinks-test.md` (7 wikilinks, 4 note types).
+
+- [x] 02.4.0 Rename VaultVerdict `SOURCE_NOT_IN_VAULT` → `NOTE_NOT_IN_VAULT`; update claim-record-design.md, tests → NARROW (`pytest tests/test_claim_record.py`)
+- [x] 02.4.1a Write tests for vault evidence gathering (`tests/test_alignment.py`): 8 tests — resolve cited note by name, one-hop traversal to linked notes, gather body content, handle note-not-in-vault, handle insufficient-vault-content, multiple note types (SOURCE→QUOTE, RESULT→HYP), linked-note-not-in-vault skipped, one-hop-only enforcement → NARROW
+- [x] 02.4.1b Implement vault evidence gathering in `ingest/alignment.py`: `gather_evidence(note_name, vault_by_name)` → GatherResult with note content + one-hop linked note content, or verdict for missing/thin notes → NARROW
+- [x] 02.4.2a Write tests for alignment evaluation (`tests/test_alignment.py`): 10 async tests — mock LLM call, evaluate claim against gathered evidence, verdict mapping to VaultVerdict, provenance recording, union semantics across cite set, LLM failure → graceful skip, no-web-verdict skip → NARROW
+- [x] 02.4.2b Implement alignment evaluation in `ingest/alignment.py`: `evaluate_alignment(claim_record, vault_by_name)` → populates `vault_verdicts` on ClaimRecord; calls `get_llm(tier="high")` + `call_llm_with_structured_output()` → NARROW
+- [x] 02.4.3 TG 02.4 complete — regression check: 210 passed, 3 deselected (slow) → MID (`pytest -m "not slow"`)
+- [x] 02.4.4 Live spot-check on real draft claims using `ukraine-rich-wikilinks-test.md` + real vault → 3 vault_supported (RESULT, CLAIM, HYP notes with accurate provenance), 4 note_not_in_vault (correctly filtered by argument_pyramid/evidence_types). OpenRouter, 13 API calls.
 
 ### TG 02.5: Citation-Free Vault Matching
 
-- [ ] 02.5.1 Batch match: one call, all claims + serialized vault → candidate matches (cost scales with vault size)
-- [ ] 02.5.2 Verify pass per match at `high` tier: vault-supported / vault-contradicted / no-vault-match
-- [ ] 02.5.3 Copy `claim_strength`/`evidence_quality` from matched vault CLAIM notes; `no-vault-match` handed off clean for Phase 03
+Architecture: two-stage — cheap batch-match call (one LLM call, all citation-free claims + serialized vault) → per-match verify at `high` tier.
+New files: `ingest/vault_match.py`, `tests/test_vault_match.py`.
+Reuses: `ingest/vault_serializer.py:serialize_vault()`, `ingest/alignment.py:gather_evidence()`.
+
+- [x] 02.5.1a Write tests for batch matching (`tests/test_vault_match.py`): 5 tests — mock LLM returns proposals, skip cited claims, empty claims early-exit, LLM failure, skip no-web-verdict → NARROW
+- [x] 02.5.1b Implement batch matching in `ingest/vault_match.py`: `batch_match_claims(records, serialized_vault)` → List[MatchProposal]; one LLM call at `mid` tier → NARROW
+- [x] 02.5.2a Write tests for per-match verification (`tests/test_vault_match.py`): 9 tests — supported/contradicted/no_vault_match verdicts, out-of-range index, note-not-in-vault, LLM failure, claim_strength/evidence_quality copy from CLAIM notes (positive + negative cases) → NARROW
+- [x] 02.5.2b Implement per-match verification in `ingest/vault_match.py`: `verify_matches(records, proposals, vault_by_name)` → populates vault_verdicts with route="vault_matched"; copies claim_strength/evidence_quality from matched CLAIM notes → NARROW
+- [x] 02.5.3 TG 02.5 complete — regression check: 226 passed, 3 deselected (slow) → MID (`pytest -m "not slow"`)
+- [x] 02.5.4 Live validation against ukraine vault → 15 batch proposals (mid tier), 9 verified vault_supported (high tier), claim_strength/evidence_quality copied from CLAIM notes. OpenRouter, same run as 02.4.4.
 
 ### TG 02.6: Gap Report v2
 
-- [ ] 02.6.1 results.json (full claim records) + report.md with per-claim verdicts, provenance, suggested actions
-- [ ] 02.6.2 Manifest-adaptive sections; explicit vault-improvement signals
-- [ ] 02.6.3 Light-profile report stays Phase 01-compatible
+Architecture: `render_gap_report(records, manifest)` → report.md string; `serialize_results(records)` → JSON-serializable list.
+New file: `ingest/gap_report.py`, `tests/test_gap_report.py`.
+Assigns `suggested_action` from verdicts; renders per-claim details with provenance; vault-improvement signals section.
+
+- [x] 02.6.1a Write tests for gap report (`tests/test_gap_report.py`): 14 tests — action assignment (7: supported→NONE, contradicted→REVISE, miscite→FIX_CITATION, web-only→ADD_VAULT_NOTE, free-unmatched→ADD_CITATION, unresolved, priority ordering), report rendering (5: summary table, claim details with provenance, vault improvement signals, no-vault-section when no vault, pipe escaping), serialization (2: round-trip, empty) → NARROW
+- [x] 02.6.1b Implement `ingest/gap_report.py`: `assign_suggested_actions(records)`, `render_gap_report(records, manifest)`, `serialize_results(records)` — manifest-adaptive (omits vault sections when vault_path is None for light-profile compatibility) → NARROW
+- [x] 02.6.2 TG 02.6 complete — regression check: 240 passed, 3 deselected (slow) → MID
 
 ### TG 02.7: Quality & Wrap
 
-- [ ] 02.7.1 MILESTONE: heavy run over ukraine working paper → gap report judged useful by user
-- [ ] 02.7.2 Light-run regression on non-vault document
-- [ ] 02.7.3 docs-align-check, docs/HANDOVER/TASKS updated, pushed to origin
+- [ ] 02.7.1 MILESTONE: heavy run over ukraine working paper → gap report judged useful by user (spot-check passed in 02.4.4/02.5.4; full run deferred to user decision on API credit)
+- [x] 02.7.2 Light-run regression: gap report with no vault → Phase 01-compatible output — verified by `test_report_no_vault_section_when_no_vault` (omits vault sections, shows "not configured")
+- [ ] 02.7.3 Update CLAUDE.md key files with new modules; update HANDOVER.md; push to origin
 
 ---
 

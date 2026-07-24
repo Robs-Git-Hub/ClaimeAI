@@ -37,7 +37,7 @@ def test_vault_verdict_values():
         "vault_supported",
         "vault_contradicted",
         "not_supported",
-        "source_not_in_vault",
+        "note_not_in_vault",
         "insufficient_vault_content",
         "no_vault_match",
     }

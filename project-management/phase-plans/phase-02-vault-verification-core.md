@@ -106,19 +106,22 @@ Serialized vault (frontmatter + key sections) ≈ 100–150K tokens for 421 note
 
 ### TG 02.4: Cited-Claim Alignment
 
-**Goal:** For each cited claim whose SOURCE notes are in the vault: does the cited source support the claim?
+**Goal:** For each cited claim whose wikilinked notes are in the vault: does the cited evidence support the claim?
 
 **Success criteria:**
-- For each (claim, cite set): resolve SOURCE notes → their QUOTE (and PARA) notes → evaluate whether the quoted material supports the claim.
-- Verdicts: `supported` (with the supporting QUOTE note as provenance), `not-supported` (cite exists but quotes don't back the claim — the miscite signal), `source-not-in-vault` (flagged, not verified — no PDF fetching in this phase).
-- Union semantics: supported by any source in the cite set = supported.
+- For each (claim, cite set): resolve the cited note (any type — SOURCE, CLAIM, RESULT, HYP, DESIGN, etc.) → gather its content + one-hop-away linked notes (QUOTE, PARA, RESULT, OBS, etc.) → evaluate whether the evidence supports the claim.
+- Verdicts: `vault_supported` (with the supporting note as provenance), `not_supported` (cite exists but evidence doesn't back the claim — the miscite signal), `note_not_in_vault` (flagged, not verified), `insufficient_vault_content` (note exists but has no evidence children within one hop).
+- Union semantics: supported by any note in the cite set = supported.
 - Evaluated with the `high` tier; offline tests with fixture notes plus a live spot-check on real draft claims.
 
 **Constraints:**
 - Never downgrade alignment evaluation below the `high` tier (same rule as Phase 01 evidence evaluation).
-- A SOURCE note with no extracted QUOTE notes is `insufficient-vault-content`, distinct from `source-not-in-vault` — both are vault-improvement signals, don't conflate them.
+- A cited note with no linked evidence notes within one hop is `insufficient-vault-content`, distinct from `note-not-in-vault` — both are vault-improvement signals, don't conflate them.
+- One-hop traversal: for each cited note, gather the note's own body content PLUS the content of notes it directly links to (one hop). Do not traverse deeper — diminishing returns and token cost.
 
-**Context:** This is the mechanically simpler mode — the evidence chain is navigable via wikilinks, no matching needed. Alignment failures are the highest-value finding for an author (a miscite survives peer review worse than a missing cite).
+**Context:** The draft cites notes at every level of the argument pyramid (SOURCE, CLAIM, RESULT, HYP, DESIGN, etc.), not just SOURCE notes. A SOURCE note's metadata alone doesn't verify anything — the evidence lives in QUOTE/PARA children. A RESULT note's body IS the evidence. The evaluator uses the cited note's content + one-hop context to assess alignment.
+
+**Test file:** `workspace/inbox/ukraine-rich-wikilinks-test.md` — sections 3.3–3.4 from the v2 draft, containing 7 wikilinks across 4 note types (SOURCE, DESIGN, RESULT, CLAIM, HYP). Includes one SOURCE with a QUOTE child (Nurullayev), one without (Farzanegan → insufficient-vault-content), and four non-SOURCE notes that exercise the full argument-chain traversal.
 
 ### TG 02.5: Citation-Free Vault Matching
 

@@ -1,30 +1,30 @@
 # Session Handover
 
-**Last Updated:** 2026-07-23 (Session 6, outgoing)
-**Current Status:** Phase 02 IN PROGRESS — TGs 02.1–02.3 complete, TGs 02.4–02.7 remaining.
+**Last Updated:** 2026-07-23 (Session 7, outgoing)
+**Current Status:** Phase 02 NEAR COMPLETE — TGs 02.1–02.6 done, TG 02.7 partially done (milestone run pending user review).
 
 ---
 
 ## Start Here
 
-**Outgoing session completed:** TGs 02.1–02.3 of Phase 02 (data models, draft parsing/citation binding, vault serializer). 107 new tests, all green. No pipeline code was modified — all new files are additive.
+**Outgoing session completed:** TGs 02.4–02.6 of Phase 02 (cited-claim alignment, citation-free vault matching, gap report). 48 new tests (240 total offline, all green). Live spot-check passed via OpenRouter (13 API calls). Two design corrections applied: (1) any wikilink type is a citation target, not just SOURCE notes; (2) one-hop traversal for evidence gathering.
 
 **Incoming session should:**
 
-1. **Begin TG 02.4 (Cited-Claim Alignment).** This is the first LLM-calling stage: for each cited claim, resolve its SOURCE notes → QUOTE/PARA notes → evaluate whether the quoted material supports the claim. Uses the `high` tier. See `project-management/phase-plans/phase-02-vault-verification-core.md` TG 02.4 for spec.
+1. **Complete TG 02.7.1 — the phase milestone.** Run the full ukraine working paper through the vault verification pipeline and produce a gap report for user review. The spot-check (02.4.4/02.5.4) covered the test excerpt (7 wikilinks, 20 sentences); the milestone requires the full paper (~7,000 words, ~450 claims). Use `scripts/spot_check_vault.py` as a template — extend it to process the full draft at `../ukraine-vote-analysis/vault-main/v-research/MS-DRAFT-working-paper-ukraine-vote-analysis-v2-full-text.md`. This costs API credit (OpenRouter; OpenAI is still out of credit).
 
-2. **Key integration context for TG 02.4:**
-   - `ingest/vault_serializer.py` provides `load_vault()` and `parse_vault_note()` — read vault notes, filter by argument_pyramid/type
-   - `ingest/citation_binder.py` provides `bind_citations()` — maps pipeline Verdicts to ClaimRecords with cite sets
-   - `utils/claim_record.py` has `VaultVerdict` enum (vault_supported, not_supported, etc.) and `RouteVerdict` model for results
-   - Vault frontmatter `type` values differ from file prefixes: SOURCE notes use subtype values (academic-paper, dataset, etc.), QUOTE notes use "quotation". `DEFAULT_EVIDENCE_TYPES` in vault_serializer.py has the correct set.
-   - The vault is at `../ukraine-vote-analysis/vault-main/` (sibling repo, read-only)
+2. **User judgment is the acceptance gate.** The gap report must be "judged useful" by the user. Present the rendered report and ask for sign-off.
 
-3. **Use `workspace/inbox/ukraine-intro-test.txt` for dev testing** (user directive). Full-paper runs reserved for TG 02.7 milestone. However, the test file has NO wikilink citations — for TG 02.4 testing, use fixture notes or construct test inputs with wikilinks.
+3. **Run `docs-align-check` before closing Phase 02.** This was specified in the phase plan but not executed in the outgoing session.
 
-4. **Cost optimization is deferred** — proceed with Phase 02 implementation.
+4. **After Phase 02 closes, begin Phase 03 planning** (Routing & Corpus — triage classifier, web route reuse, doc-rag-backend client).
 
-**Phase plan:** `project-management/phase-plans/phase-02-vault-verification-core.md` (status: IN PROGRESS)
+**What was NOT done:**
+- `docs-align-check` — skipped (time constraint)
+- Full-paper milestone run — deferred (requires user decision on API spend)
+- Pipeline integration — TG 02.4/02.5/02.6 functions are standalone; they're not yet wired into the LangGraph pipeline or `scripts/run_from_pdf.py`. The spot-check script (`scripts/spot_check_vault.py`) demonstrates end-to-end usage but isn't production wiring.
+
+**Phase plan:** `project-management/phase-plans/phase-02-vault-verification-core.md` (status: IN PROGRESS — TG 02.7 remaining)
 
 ---
 
@@ -73,30 +73,19 @@ All present: `OPENAI_API_KEY` (sk-proj-, **OUT OF CREDIT as of Session 5** — t
 | Session 4 | OpenAI | Exa | 448 claims (ukraine paper), ~$10 cost |
 | Session 5 | OpenAI | Exa | FAILED (429 insufficient_quota) — error recorded cleanly |
 | Session 5 | OpenRouter | Exa | 15 claims (ukraine-intro-test.txt), 10 supported / 5 refuted |
+| Session 7 | OpenRouter | — | Vault alignment + matching spot-check: 3 vault_supported (alignment), 9 vault_supported (matching), 4 note_not_in_vault (correct filtering). 13 API calls. |
 
 ### Key decisions made
 
-1–18: See Session 5 handover (preserved in git history).
-19. **Vault is trusted for Phase 02 dev** (user directive) even though known errors exist.
-20. **ClaimRecord wraps Verdict, doesn't replace it** (Session 6). Verdict already duplicates ValidatedClaim fields; ClaimRecord composes a web_verdict (Optional[Verdict]) plus Phase 02 attributes. Vault verdicts use a separate `VaultVerdict` enum from the web-route `VerificationResult`.
-21. **Vault `type` field values differ from file prefixes** (Session 6). SOURCE notes use subtype values (academic-paper, dataset, policy-paper, web-page, source-dataset, data-source). QUOTE notes use "quotation". `DEFAULT_EVIDENCE_TYPES` in vault_serializer.py encodes the correct set, discovered from the real vault.
-22. **Citation scope is sentence-level only** (Session 6). Conservative heuristic: a citation applies only to the sentence it appears in, never propagated backward to earlier sentences in the paragraph. A wrong "citation-free" beats a wrong binding.
-23. **Sentence splitting replicates the pipeline's exact logic** (Session 6). `ingest/draft_parser.py:split_sentences()` mirrors `claim_extractor/nodes/sentence_splitter.py` lines 59-83 verbatim so `original_index` values match between pre-processing and pipeline output.
-
-### Cost analysis (Session 4)
-
-First full academic paper run: ukraine working paper (7,000 words, 20 sections, 448 claims).
-
-| Model | Tier | Requests | Input tokens | Cost |
-|---|---|---|---|---|
-| gpt-4o-mini | low | 1,869 | 2.86M | ~$0.47 |
-| gpt-4.1 | high | 448 | 3.81M | ~$7.70 |
-| gpt-4.1-mini | mid | 4,892 | 3.61M | ~$1.90 |
-| **Total** | | **7,209** | **10.27M** | **~$10.07** |
+1–23: See Session 6 handover (preserved in git history).
+24. **Any wikilink type is a citation target** (Session 7, user correction). The phase plan originally assumed only SOURCE→QUOTE chains. The real draft cites DESIGN, RESULT, CLAIM, HYP notes — all levels of the argument pyramid. The alignment evaluator resolves ANY cited note + one-hop linked notes as evidence.
+25. **One-hop traversal for evidence gathering** (Session 7, user decision). For each cited note, gather the note's own body content PLUS the content of notes it directly links to (one hop). Deeper traversal has diminishing returns and token cost.
+26. **VaultVerdict renamed: SOURCE_NOT_IN_VAULT → NOTE_NOT_IN_VAULT** (Session 7). Generalized to match the any-wikilink-type design.
+27. **AlignmentOutput.verdict uses Literal, not VaultVerdict enum** (Session 7, /simplify review). The LLM should only return 3 of VaultVerdict's 6 values; Literal constrains the structured output correctly.
 
 ### Test suite
 
-195 tests total (192 pass with `-m "not slow"`, 3 slow tests deselected).
+243 tests total (240 pass with `-m "not slow"`, 3 slow tests deselected).
 
 | File | Count | Covers |
 |------|-------|--------|
@@ -110,9 +99,12 @@ First full academic paper run: ukraine working paper (7,000 words, 20 sections, 
 | test_draft_parser.py | 25 | Wikilink parsing, stripping, author-year detection, sentence splitting, ParsedDraft |
 | test_citation_binder.py | 15 | Citation binding via original_index, union semantics, decomposition survival |
 | test_vault_serializer.py | 24 | Vault note parsing, filtering, serialization, token counting (22 narrow + 2 slow live vault) |
+| test_alignment.py | 20 | gather_evidence (8), evaluate_alignment (12, async with mocked LLM) |
+| test_vault_match.py | 14 | batch_match_claims (5), verify_matches (9, async with mocked LLM) |
+| test_gap_report.py | 14 | assign_suggested_actions (7), render_gap_report (5), serialize_results (2) |
 | test_ingest.py (slow) | 1 | Docling PDF extraction (~16s) |
 
-### Phase 02 new files (Session 6)
+### Phase 02 new files (Sessions 6–7)
 
 | File | Purpose |
 |------|---------|
@@ -123,11 +115,12 @@ First full academic paper run: ukraine working paper (7,000 words, 20 sections, 
 | `ingest/draft_parser.py` | Wikilink parsing, author-year detection, sentence splitting, parse_draft() |
 | `ingest/citation_binder.py` | bind_citations(verdicts, parsed_draft) → List[ClaimRecord] |
 | `ingest/vault_serializer.py` | VaultNote, SerializedVault, parse_vault_note(), load_vault(), serialize_vault() |
+| `ingest/alignment.py` | gather_evidence() (one-hop vault traversal) + evaluate_alignment() (high-tier LLM) |
+| `ingest/vault_match.py` | batch_match_claims() (mid-tier batch) + verify_matches() (high-tier adversarial) |
+| `ingest/gap_report.py` | assign_suggested_actions(), render_gap_report(), serialize_results() |
+| `scripts/spot_check_vault.py` | Live spot-check for alignment + vault matching against real vault |
+| `workspace/inbox/ukraine-rich-wikilinks-test.md` | Test excerpt with 7 wikilinks across 4 note types |
 | `tests/fixtures/vault/` | 6 fixture vault notes for offline testing |
-
-### Session 5 vault corrections (sibling repo)
-
-Corrected the ukraine-vote-analysis vault (9 files): ES-11/7 vote tally 98->93 across 9 notes (3 de Carvalho notes with [sic] annotations preserving what the source wrote; 6 downstream notes with corrected figure); "12th ESS"->"11th ESS" in COM-us-shift-qualitative-analysis.md (3 occurrences + rerun warning added). The v2 draft's "98" is left uncorrected as the Phase 02 test-corpus error.
 
 ---
 
@@ -141,3 +134,4 @@ Corrected the ukraine-vote-analysis vault (9 files): ES-11/7 vote tally 98->93 a
 | 2026-07-23 | Session 4: Emoji fix in dev.py, design discussion on academic verification scope, Phase 02 plan written, first full academic paper PDF test (448 claims, $10 cost with analysis). |
 | 2026-07-23 | Session 5: Phase 01 closed (01.5.3 /claimify skill e2e test passed via OpenRouter after OpenAI 429). Phase 02 approved. Standard dev test file established. Vault corrections: 98->93 across 9 notes with [sic] on de Carvalho source notes; 12th->11th ESS in commission brief with rerun warning. 4 commits. |
 | 2026-07-23 | Session 6: Phase 02 TGs 02.1–02.3 implemented. Data models (ClaimRecord, ResourceManifest, RunProfile), draft parsing + citation binding, vault serializer with live vault validation. 107 new tests (195 total). CLAUDE.md key files updated. |
+| 2026-07-23 | Session 7: Phase 02 TGs 02.4–02.6 implemented. Cited-claim alignment (any wikilink type + one-hop traversal), citation-free vault matching (mid-tier batch + high-tier verify), gap report with suggested actions. Live spot-check passed (OpenRouter). Design corrections: any-wikilink-type, one-hop traversal, NOTE_NOT_IN_VAULT rename. 48 new tests (243 total). |
