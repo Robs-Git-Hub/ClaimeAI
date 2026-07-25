@@ -1,35 +1,56 @@
 # Session Handover
 
-**Last Updated:** 2026-07-25 (Session 13, outgoing)
-**Current Status:** All phases through 05 COMPLETE. Session 13 backlog maintenance COMPLETE (4 fixes, 32 new tests, 523 total). Backlog clear. Next: Phase 06 planning (Deep Research Commissions).
+**Last Updated:** 2026-07-25 (Session 14, outgoing)
+**Current Status:** All phases through 05 COMPLETE. Session 14 Phase 06 prep COMPLETE (comparator set, integration mapping, orchestration approach). Next: Phase 06 plan writing and implementation with Fable.
 
 ---
 
 ## Start Here
 
-**Outgoing session completed:** Session 13 — backlog maintenance clearing four items before Phase 06 planning:
+**Outgoing session completed:** Session 14 — Phase 06 groundwork. No code changes; one new doc (`docs/phase-06-comparator-set.md`).
 
-1. **Zero-evidence "Refuted" bug FIXED.** `VerificationResult` gained `INSUFFICIENT` ("Insufficient Information") and `CONFLICTING` ("Conflicting Evidence"). Empty evidence now returns INSUFFICIENT **without an LLM call** (cost win). LLM failure and unparseable verdict strings also default to INSUFFICIENT (previously all silently became REFUTED). `fact_checker/nodes/generate_report.py` counts all four verdicts. A dead search provider can no longer manufacture false refutations — a burst of *Insufficient* verdicts is now the signal of provider trouble. Note: search-API errors vs genuine zero results are still indistinguishable (both → INSUFFICIENT); error-vs-empty telemetry stays on the backlog.
-2. **Gap-report web-call counter FIXED.** `_render_route_summary` now counts from `route_verdicts` (ground truth for handler invocations): "Web calls made this run: N (X via routing, Y via cross-checks)" + corpus breakdown when nonzero + invocations-vs-searches caveat. The old counter missed all D4/D5/D10 cross-check calls.
-3. **Triage importance recalibrated (user-approved).** Anchored 1–5 rubric (5 thesis-carrying, 4 directly load-bearing, 3 supporting, 2 context, 1 incidental) + "most claims are 2–3" distribution guidance + anti-inflation warning + core-data carve-out (user decision D57): quantitative claims reporting the core data the draft analyzes (e.g. vote tallies in a voting-analysis paper) rate 4; incidental figures stay 2–3. `cross_check_importance_threshold` now configurable in config.toml `[pipeline]` (default 4 unchanged). Live spot-check: standard test file went from 14/17 claims ≥4 (pre-rubric) to 12/17 (post-rubric with carve-out); vote tallies retained at 4 (D10 coverage preserved for the planted-error scenario), incidental figures dropped to 2–3.
-4. **Zeng 2026 corpus ID added.** Sibling repo fixed the null-byte bug (root cause: Unicode PUA chars from Docling font extraction), re-ingested Zeng 2026. New document ID: `d_ZikkNbPZFWWV` — verified live via `list_documents()` AND scoped hybrid search (10 on-topic chunks). Corpus now has all 4 planned papers. Backend metadata filters also live (`GET /documents?title=...` / `?author=...`).
+1. **Search provider integration mapped.** Code Explorer agent read all search-related files. Primary change point: `claim_verifier/nodes/retrieve_evidence.py` — add a `"claude"` case to the `_search_query()` match/case dispatch. Everything downstream (query generation, evidence summarization, evaluation, routing/cascade) is provider-agnostic and needs no changes. New provider must return `List[Evidence]` where `Evidence(url: str, text: str, title: Optional[str])`.
+
+2. **Comparator set gathered (5 claims, Exa + Tavily).** Exa still dead (402 NO_MORE_CREDITS on all 5 queries — third consecutive session). Tavily returned 15 results. Key findings:
+   - **Tavily fails on specific entity queries** (claim 2: ES-11/1 vote count → generic UN pages, scores <0.09)
+   - **Refutation works well** (claim 3: planted "98 votes" error → two sources say "93", scores >0.89)
+   - **Raw content wildly oversized** (Wikipedia pages 186–486 KB; evidence summarization essential)
+   - **Neither provider is optimal** — Exa caps at 2 KB snippets (sometimes too short), Tavily dumps full pages (always too long). Claude WebSearch + WebFetch gives control over both search and extraction.
+   - Full data: `docs/phase-06-comparator-set.md`
+
+3. **Orchestration approach decided (user decision D59).** Fable orchestrator + goal-loop pattern for Phase 06. Define success criteria from comparator set (verdict match rate, speed, cost), dispatch sub-agents to implement, verification agents check criteria, loop on failure. This makes Phase 06 experimental rather than linear.
 
 **Incoming session should:**
 
-1. **Phase 06 planning** (Claude-Native Web Search) — replace Exa/Tavily with a `claude` search provider using WebSearch + WebFetch from the Max plan. See TASKS.md roadmap for direction, tradeoffs, and approach. The `web-interaction` skill (`.claude/skills/web-interaction/`) documents all 7 available web methods. Original "Deep Research Commissions" phase renumbered to 07.
-2. **Exa may still be OUT OF CREDITS** (402 NO_MORE_CREDITS observed Session 12; $10/month auto-refresh). config.toml committed default is `exa` — flip to `tavily` locally if Exa credits haven't refreshed. Tavily verified working (1,000 free credits/month).
-3. **Remaining backlog items** (lower priority):
-   - Vault aliases lint in sibling repo (ClaimeAI side done: `build_vault_index()` indexes aliases)
-   - Sibling-repo prod-DB cleanup: 4 dead Session-9 document shells + 2 ArXiv test docs still in prod
-   - Search error-vs-empty telemetry: `retrieve_evidence` can't distinguish API errors from genuine zero results (both → INSUFFICIENT — correct verdict, but no alerting)
-   - PDF-only drafts / plain-text citation parsing; vault-less heavy runs; semi-automated vault enrichment
+1. **Use Fable as session model** for Phase 06 planning and orchestration.
+2. **Write the Phase 06 plan** using the comparator set and integration map as input. Plan should include:
+   - Task groups with explicit acceptance criteria derived from comparator data
+   - Goal-loop orchestration: implement → verify against criteria → loop on failure
+   - Three evaluation metrics: speed (parallelisation ceiling), quality/accuracy (verdict match), cost ($0 marginal + LLM tokens)
+3. **Begin implementation** via goal-loop: define the goal condition, dispatch sub-agents, verify, iterate.
+4. **Comparator claim 5 correction:** ES-11 has 12 resolutions, not fifteen. The "fifteen" in the test file includes 3 amendments selected for analysis. The claim is false — keep as a negative test case but record the ground truth for the evaluator.
+5. **Exa is CONFIRMED DEAD** (402 on all 5 queries, Session 14). Don't waste time retrying. Tavily works as fallback if needed for baseline comparison.
+
+**Integration surface summary (for Fable):**
+
+| File | What to change |
+|------|---------------|
+| `claim_verifier/nodes/retrieve_evidence.py` | Add `SearchProviders.claude()` method + `"claude"` case in `_search_query()` dispatch |
+| `config.toml` | Add `search_provider = "claude"` option |
+| `utils/cost_tracking.py` | Add `"claude"` to cost estimates (or $0) |
+| `utils/settings.py` | Add Claude/Anthropic API key validation if needed |
+| `pyproject.toml` | Add `anthropic` SDK dependency if not already present |
+
+**No changes needed:** query generation, evidence summarization, evaluation, routing/cascade, gap report, triage — all provider-agnostic.
+
+**Docs to update after implementation:** `CLAUDE.md` (provider convention), `docs/websearch-and-costs.md` (cost section), `docs/llm-providers.md` (if relevant), `README.md` (search provider list).
 
 **Critical config notes for heavy runs:**
 - `--vault` path must be the vault ROOT (`vault-main`), NOT `vault-main/v-research` — `load_vault()` appends `v-research` internally. Wrong path silently produces zero vault notes.
 - `--argument-pyramid` value must be `un-ukraine-russia-war-votes-working-paper` for the real vault.
 - Real-vault command (4 corpus papers): `poetry run python scripts/run_heavy.py workspace/inbox/ukraine-intro-cited-test.md --vault "PATH/vault-main" --argument-pyramid un-ukraine-russia-war-votes-working-paper --corpus-ids d_o3qBk5fESO_q,d_7ZUo22uPGdsf,d_7lRaRsrtAJOW,d_ZikkNbPZFWWV`
 
-**Phase plans:** `phase-02` through `phase-05` all COMPLETE. Phase 05 plan carries Amendment (Session 12) for D10 and Resolved (Session 13) for Risk 1 (importance clustering). Phase 06 (Claude-Native Web Search) direction approved Session 13 — plan to be written next session.
+**Phase plans:** `phase-02` through `phase-05` all COMPLETE. Phase 06 plan to be written by Fable (incoming session).
 
 ---
 
@@ -101,6 +122,7 @@ All present: `OPENAI_API_KEY` (sk-proj-, topped up Session 10), `EXA_API_KEY` (U
 56. **Exa free tier is a hard credit cap** (Session 12 verified). $20 sign-up + $10/month refresh, $7/1k searches; 402 NO_MORE_CREDITS when exhausted. Rate limits are separate. Committed config default stays `exa` (user decision); flip to `tavily` locally during outages.
 57. **Core-data carve-out for importance rubric** (Session 13, user decision). Quantitative claims reporting the core data the draft's analysis rests on (e.g. vote tallies in a voting-analysis paper) rate importance 4 (directly load-bearing) even though the argument might survive any single figure being wrong. Incidental figures (population shares, date ranges, section counts) stay 2–3. Rationale: first spot-check with the anchored rubric dropped tallies to 3, which would have removed D10 coverage from the exact planted-error scenario D10 was built for.
 58. **`cross_check_importance_threshold` is now configurable** (Session 13). Default 4 unchanged (user Session 12 decision). Raise to 5 to tighten cost control; lower to widen confirmation coverage. Config key: `[pipeline] cross_check_importance_threshold`.
+59. **Phase 06 orchestration: Fable + goal-loop** (Session 14, user decision). Use Fable as orchestrator model. Define success criteria from comparator set (5 claims with expected verdicts). Sub-agents implement, verification agents check criteria, loop on failure until criteria met. Three evaluation metrics: speed (incl. parallelisation ceiling), quality/accuracy (verdict match rate), cost ($0 marginal search + LLM tokens).
 
 ### Test suite
 
@@ -188,3 +210,4 @@ Note: 4 dead document shells from Session 9's failed ingestion + 2 ArXiv test do
 | 2026-07-25 | Session 11: Phase 05 TGs 05.1–05.4 implemented. Cascade routing, citation-aware scoping, D4/D5 cross-checks, conflict detection. Live milestone (cascade verified, source-conflict pending cited test file). 471 tests. |
 | 2026-07-25 | Session 12: Phase 05 CLOSED. D10 support-confirmation amendment, alias-based note resolution, conflict-demo fixture, source-conflict demonstrated live. Cited-file corpus-scoping run. Cost doc updated. Exa credits exhausted (hard-cap confirmed). 488 tests. |
 | 2026-07-25 | Session 13: Backlog maintenance — 4 fixes (zero-evidence verdicts, web-call counter, triage importance recalibration + core-data carve-out, Zeng 2026 corpus ID). 32 new tests, 523 total. Backlog clear for Phase 06. |
+| 2026-07-25 | Session 14: Phase 06 prep — comparator set (5 claims × Exa/Tavily), integration surface mapping, evaluation metrics (speed/quality/cost), Fable + goal-loop orchestration approach. Exa confirmed dead (402 ×5). One new doc. |
