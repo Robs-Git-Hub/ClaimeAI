@@ -17,6 +17,7 @@ from ingest.gap_report import (
     render_gap_report,
     serialize_results,
 )
+from ingest.routing import RESOLVED, route_decision
 from utils.claim_record import (
     CitationStatus,
     ClaimRecord,
@@ -150,6 +151,66 @@ def test_action_add_citation_free_no_match():
     result = assign_suggested_actions([record])
 
     assert result[0].suggested_action == SuggestedAction.ADD_CITATION
+
+
+def test_action_add_citation_when_web_insufficient_citation_free():
+    """An insufficient web verdict must not be treated as resolved: a
+    citation-free claim with no vault match still needs ADD_CITATION, not
+    ADD_VAULT_NOTE."""
+    record = make_record(
+        "Claim H",
+        citation_status=CitationStatus.CITATION_FREE,
+        route_verdicts=[],
+        web_result=VerificationResult.INSUFFICIENT,
+    )
+
+    result = assign_suggested_actions([record])
+
+    assert result[0].suggested_action == SuggestedAction.ADD_CITATION
+
+
+def test_action_unresolved_when_web_insufficient_cited():
+    """Same insufficient web verdict, but the claim is cited (not
+    citation-free) with no vault match -> falls through to UNRESOLVED."""
+    record = make_record(
+        "Claim I",
+        citation_status=CitationStatus.CITED,
+        route_verdicts=[],
+        web_result=VerificationResult.INSUFFICIENT,
+    )
+
+    result = assign_suggested_actions([record])
+
+    assert result[0].suggested_action == SuggestedAction.UNRESOLVED
+
+
+def test_action_add_citation_when_web_conflicting_citation_free():
+    """A conflicting web verdict must likewise not be treated as resolved:
+    citation-free with no vault match -> ADD_CITATION, not ADD_VAULT_NOTE."""
+    record = make_record(
+        "Claim J",
+        citation_status=CitationStatus.CITATION_FREE,
+        route_verdicts=[],
+        web_result=VerificationResult.CONFLICTING,
+    )
+
+    result = assign_suggested_actions([record])
+
+    assert result[0].suggested_action == SuggestedAction.ADD_CITATION
+
+
+def test_action_unresolved_when_web_conflicting_cited():
+    """Conflicting web verdict, cited claim, no vault match -> UNRESOLVED."""
+    record = make_record(
+        "Claim K",
+        citation_status=CitationStatus.CITED,
+        route_verdicts=[],
+        web_result=VerificationResult.CONFLICTING,
+    )
+
+    result = assign_suggested_actions([record])
+
+    assert result[0].suggested_action == SuggestedAction.UNRESOLVED
 
 
 def test_action_unresolved():
@@ -669,6 +730,227 @@ def test_light_profile_unchanged():
     assert "source-conflict" not in report.lower()
     assert "single-lineage" not in report
     assert "Vault Improvement Signals" not in report
+
+
+# ---------------------------------------------------------------------------
+# _render_route_summary web/corpus call counting (TG M2)
+# ---------------------------------------------------------------------------
+#
+# ``route_verdicts`` is ground truth for handler invocations -- a record's
+# ``routing_decision`` only reflects the route ``decide_route``/cascade
+# settled on. D4/D5/D10 cross-checks (``ingest.routing.apply_cross_checks``)
+# invoke route handlers directly and append ``RouteVerdict`` entries WITHOUT
+# touching ``routing_decision``, so a vault-resolved record can carry a real
+# web (or corpus) call that a routing_decision-only count would miss.
+
+
+def make_routed_record(
+    claim_text,
+    routing_decision,
+    route_verdicts,
+    citation_status=CitationStatus.CITATION_FREE,
+    importance=None,
+    triage_class=None,
+    cite_set=None,
+):
+    return ClaimRecord(
+        citation_status=citation_status,
+        position=DraftPosition(sentence_index=0),
+        route_verdicts=route_verdicts,
+        routing_decision=routing_decision,
+        triage_class=triage_class,
+        importance=importance,
+        cite_set=cite_set or [],
+    )
+
+
+def test_cross_check_web_verdict_counted_despite_vault_routing_decision():
+    """A vault-resolved record carrying a web RouteVerdict from a D5/D10
+    cross-check must be counted as a web call -- the bug this TG fixes."""
+    record = make_routed_record(
+        "Important supported claim.",
+        routing_decision=RESOLVED,
+        route_verdicts=[
+            RouteVerdict(route="vault_aligned", verdict="vault_supported", provenance="NOTE-1"),
+            RouteVerdict(route="web", verdict="Supported", provenance="https://example.com/a"),
+        ],
+        importance=5,
+    )
+    manifest = ResourceManifest(draft_path=Path("draft.md"), vault_path=Path("vault"))
+
+    report = render_gap_report([record], manifest)
+
+    assert "Web calls made this run: 1" in report
+    assert "0 via routing, 1 via cross-checks" in report
+
+
+def test_conflict_demo_shape_nine_vault_resolved_web_cross_checks():
+    """Reproduces the live conflict-demo run: 9 vault-resolved claims, each
+    carrying one web cross-check RouteVerdict. Previously reported 0 web
+    calls; must now report 9, all via cross-checks."""
+    records = [
+        make_routed_record(
+            f"Claim {i}",
+            routing_decision=RESOLVED,
+            route_verdicts=[
+                RouteVerdict(
+                    route="vault_aligned", verdict="vault_supported", provenance=f"NOTE-{i}"
+                ),
+                RouteVerdict(
+                    route="web", verdict="Supported", provenance=f"https://example.com/{i}"
+                ),
+            ],
+            importance=5,
+        )
+        for i in range(9)
+    ]
+    manifest = ResourceManifest(draft_path=Path("draft.md"), vault_path=Path("vault"))
+
+    report = render_gap_report(records, manifest)
+
+    assert "Web calls made this run: 9" in report
+    assert "0 via routing, 9 via cross-checks" in report
+
+
+def test_mixed_routing_and_cross_check_web_calls_sum():
+    routed = make_routed_record(
+        "Routed to web directly.",
+        routing_decision=route_decision("web"),
+        route_verdicts=[
+            RouteVerdict(route="web", verdict="Refuted", provenance="https://example.com/b"),
+        ],
+    )
+    cross_checked = make_routed_record(
+        "Vault-resolved, web cross-checked.",
+        routing_decision=RESOLVED,
+        route_verdicts=[
+            RouteVerdict(route="vault_matched", verdict="vault_supported", provenance="NOTE-2"),
+            RouteVerdict(route="web", verdict="Supported", provenance="https://example.com/c"),
+        ],
+        importance=5,
+    )
+    manifest = ResourceManifest(draft_path=Path("draft.md"), vault_path=Path("vault"))
+
+    report = render_gap_report([routed, cross_checked], manifest)
+
+    assert "Web calls made this run: 2" in report
+    assert "1 via routing, 1 via cross-checks" in report
+
+
+def test_d4_corpus_cross_check_counted_and_broken_out():
+    record = make_routed_record(
+        "Cited, vault-resolved, corpus cross-checked.",
+        routing_decision=RESOLVED,
+        citation_status=CitationStatus.CITED,
+        cite_set=["NOTE-3"],
+        route_verdicts=[
+            RouteVerdict(route="vault_aligned", verdict="vault_supported", provenance="NOTE-3"),
+            RouteVerdict(route="corpus", verdict="corpus_supported", provenance="doc-3"),
+        ],
+        importance=5,
+    )
+    manifest = ResourceManifest(draft_path=Path("draft.md"), vault_path=Path("vault"))
+
+    report = render_gap_report([record], manifest)
+
+    assert "Corpus calls made this run: 1" in report
+    assert "0 via routing, 1 via cross-checks" in report
+
+
+def test_no_double_count_when_routed_handler_appended_its_own_verdict():
+    """The normal (non-cross-check) case: routing_decision is route-web and
+    the web handler appended exactly one RouteVerdict for it -- must count
+    once, not twice."""
+    record = make_routed_record(
+        "Normally web-routed claim.",
+        routing_decision=route_decision("web"),
+        route_verdicts=[
+            RouteVerdict(route="web", verdict="Supported", provenance="https://example.com/d"),
+        ],
+    )
+    manifest = ResourceManifest(draft_path=Path("draft.md"), vault_path=Path("vault"))
+
+    report = render_gap_report([record], manifest)
+
+    assert "Web calls made this run: 1" in report
+    assert "1 via routing, 0 via cross-checks" in report
+
+
+def test_none_routing_decision_web_verdict_still_counted():
+    """``routing_decision`` can be None (e.g. a hand-built record, or a
+    field left unset); ``route_name_from_decision`` on it must not crash,
+    and any web verdict present is still a real invocation."""
+    record = make_routed_record(
+        "No routing decision recorded.",
+        routing_decision=None,
+        route_verdicts=[
+            RouteVerdict(route="web", verdict="Supported", provenance="https://example.com/e"),
+        ],
+        triage_class="general-factual",
+    )
+    manifest = ResourceManifest(draft_path=Path("draft.md"), vault_path=Path("vault"))
+
+    report = render_gap_report([record], manifest)
+
+    assert "Web calls made this run: 1" in report
+    assert "0 via routing, 1 via cross-checks" in report
+
+
+def test_multiple_web_verdicts_on_one_record_each_counted():
+    """A cascade-silent web attempt followed by a cross-check web call on
+    the SAME record -- both are real invocations and both must count."""
+    record = make_routed_record(
+        "Escalated then cross-checked.",
+        routing_decision=RESOLVED,
+        route_verdicts=[
+            RouteVerdict(
+                route="web",
+                verdict="Insufficient Information",
+                provenance="https://example.com/f",
+            ),
+            RouteVerdict(route="web", verdict="Supported", provenance="https://example.com/g"),
+        ],
+        importance=5,
+    )
+    manifest = ResourceManifest(draft_path=Path("draft.md"), vault_path=Path("vault"))
+
+    report = render_gap_report([record], manifest)
+
+    assert "Web calls made this run: 2" in report
+
+
+def test_handler_error_verdicts_counted_as_attempted_invocation():
+    """A ``handler_error`` synthetic verdict (``execute_routing``'s failure
+    path) still represents a real, attempted route-handler call."""
+    record = make_routed_record(
+        "Web handler raised.",
+        routing_decision=route_decision("web"),
+        route_verdicts=[
+            RouteVerdict(route="web", verdict="handler_error", reasoning="Handler raised: boom"),
+        ],
+    )
+    manifest = ResourceManifest(draft_path=Path("draft.md"), vault_path=Path("vault"))
+
+    report = render_gap_report([record], manifest)
+
+    assert "Web calls made this run: 1" in report
+    assert "1 via routing, 0 via cross-checks" in report
+
+
+def test_route_summary_caveat_about_invocations_vs_searches():
+    """The report must disclose that these are handler invocations, not raw
+    searches -- one web invocation can run up to 5 search iterations."""
+    record = make_routed_record(
+        "Any claim.",
+        routing_decision=route_decision("web"),
+        route_verdicts=[RouteVerdict(route="web", verdict="Supported")],
+    )
+    manifest = ResourceManifest(draft_path=Path("draft.md"), vault_path=Path("vault"))
+
+    report = render_gap_report([record], manifest)
+
+    assert "invocation" in report.lower()
+    assert "5 search iteration" in report.lower()
 
 
 # ---------------------------------------------------------------------------

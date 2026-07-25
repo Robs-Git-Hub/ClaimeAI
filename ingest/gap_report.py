@@ -234,6 +234,38 @@ def _has_routing_data(records: List[ClaimRecord]) -> bool:
     )
 
 
+def _route_call_counts(records: List[ClaimRecord], route: str) -> tuple:
+    """Count real handler invocations for `route`, split by provenance.
+
+    ``route_verdicts`` is ground truth for handler invocations --
+    ``routing_decision`` alone only reflects the route ``decide_route``
+    (and cascade re-decides) settled on for a claim. D4/D5/D10 cross-checks
+    (``ingest.routing.apply_cross_checks``) invoke route handlers directly
+    and append `RouteVerdict` entries WITHOUT touching `routing_decision`,
+    so counting only routing decisions silently drops those calls (TG M2 --
+    observed live: a run reported "0 web calls" while D10 made 9).
+
+    Each entry is classified per-record: if its route matches the route
+    `routing_decision` resolved to, it's a routing call; otherwise it's a
+    cross-check call. Every entry counts (including `handler_error`
+    entries -- a failed handler is still an attempted invocation), and a
+    record with multiple entries for the same route (e.g. a cascade-silent
+    attempt followed by a later cross-check) counts each one.
+    """
+    via_routing = 0
+    via_cross_check = 0
+    for record in records:
+        expected_route = route_name_from_decision(record.routing_decision or "")
+        for rv in record.route_verdicts:
+            if rv.route != route:
+                continue
+            if route == expected_route:
+                via_routing += 1
+            else:
+                via_cross_check += 1
+    return via_routing, via_cross_check
+
+
 def _render_route_summary(records: List[ClaimRecord]) -> List[str]:
     """The cost/route story (TG 03.3): decisions, routes taken, web avoided.
 
@@ -241,6 +273,10 @@ def _render_route_summary(records: List[ClaimRecord]) -> List[str]:
     Phase 01's uniform treatment would have sent to web but this run kept
     off it by triage: skip-trivial claims plus never-web (novel-result /
     dataset-dependent) claims.
+
+    The "calls made" lines (TG M2) are derived from `route_verdicts`, not
+    from `routing_decision` alone, so D4/D5/D10 cross-check invocations are
+    counted -- see `_route_call_counts`.
     """
     lines = ["## Route summary", ""]
 
@@ -269,17 +305,33 @@ def _render_route_summary(records: List[ClaimRecord]) -> List[str]:
     skip_trivial = sum(1 for r in records if r.routing_decision == SKIP_TRIVIAL)
     never_web = sum(1 for r in records if r.triage_class in NEVER_WEB_CLASSES)
     avoided = skip_trivial + never_web
-    web_made = routes_taken.get("web", 0)
+
+    web_via_routing, web_via_cross_check = _route_call_counts(records, WEB_ROUTE)
+    web_made = web_via_routing + web_via_cross_check
+    corpus_via_routing, corpus_via_cross_check = _route_call_counts(records, CORPUS_ROUTE)
+    corpus_made = corpus_via_routing + corpus_via_cross_check
 
     lines.append("### Web calls avoided vs. Phase 01 baseline")
     lines.append("")
-    lines.append(f"- Web calls made this run: {web_made}")
+    lines.append(
+        f"- Web calls made this run: {web_made} "
+        f"({web_via_routing} via routing, {web_via_cross_check} via cross-checks)"
+    )
+    if corpus_made:
+        lines.append(
+            f"- Corpus calls made this run: {corpus_made} "
+            f"({corpus_via_routing} via routing, {corpus_via_cross_check} via cross-checks)"
+        )
     lines.append(
         f"- Web calls avoided by triage: {avoided} "
         f"(skip-trivial: {skip_trivial}, never-web: {never_web})"
     )
     lines.append(
         f"- Phase 01 uniform treatment would web-check all {len(records)} claim(s)."
+    )
+    lines.append(
+        "- Counts are route-handler invocations, not raw searches -- a single "
+        "web invocation may run up to 5 search iterations."
     )
     lines.append("")
     return lines

@@ -575,7 +575,9 @@ def _redecide(
 # Importance-gated cross-checks (TG 05.3)
 # ---------------------------------------------------------------------------
 
-CROSS_CHECK_IMPORTANCE_THRESHOLD = 4
+CROSS_CHECK_IMPORTANCE_THRESHOLD: int = _PIPELINE_CONFIG.get(
+    "cross_check_importance_threshold", 4
+)
 
 
 def _needs_d4(record: ClaimRecord) -> bool:

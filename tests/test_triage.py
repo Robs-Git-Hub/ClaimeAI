@@ -366,3 +366,76 @@ def test_prompt_has_directional_tie_break_toward_web_verifiable():
     assert "never-web" in prompt
     assert "web-verifiable" in prompt
     assert "missed error" in prompt or "worst-case" in prompt
+
+
+# ---------------------------------------------------------------------------
+# TG M3: importance rubric anchors (recalibration)
+# ---------------------------------------------------------------------------
+#
+# Motivating problem: the prompt gave every axis worked guidance except
+# importance, which got one unanchored line ("1 (least) to 5 (most)").
+# Live result: importance clustered at >= 4 for nearly every claim in a
+# run, which barely gates the D4/D5/D10 importance-gated cross-checks
+# (CROSS_CHECK_IMPORTANCE_THRESHOLD), roughly doubling web calls. The fix
+# is prompt guidance only -- the threshold value (4) is unchanged.
+
+
+def test_prompt_has_anchored_importance_rubric():
+    """Each importance level (1-5) must be tied to a concrete, load-bearing
+    anchor, not just a bare numeric range."""
+    prompt = TRIAGE_SYSTEM_PROMPT.lower()
+
+    assert "thesis-carrying" in prompt
+    assert "load-bearing for a main section" in prompt or "main section's conclusion" in prompt
+    assert "supporting evidence" in prompt
+    assert "background" in prompt or "context" in prompt
+    assert "incidental" in prompt
+
+
+def test_prompt_has_importance_distribution_guidance():
+    """The prompt must steer the model away from clustering at high
+    importance: most claims in a typical draft are mid-range (2-3),
+    reserving 4-5 for claims whose failure would materially damage the
+    argument."""
+    prompt = TRIAGE_SYSTEM_PROMPT.lower()
+
+    assert "most claims" in prompt
+    assert "materially damage" in prompt or "materially harm" in prompt
+
+
+def test_prompt_warns_against_inflating_importance_for_verifiability():
+    """Importance measures load-bearing-ness only -- a claim being
+    verifiable or merely interesting is not a reason to mark it important."""
+    prompt = TRIAGE_SYSTEM_PROMPT.lower()
+
+    assert "verifiable" in prompt and "interesting" in prompt
+    assert "load-bearing" in prompt
+
+
+def test_importance_field_description_mirrors_rubric_anchors():
+    """The importance Field description on TriageProposal (structured
+    output schema) should briefly echo the rubric anchors so the model
+    sees consistent guidance in both the prompt and the schema."""
+    field_info = TriageProposal.model_fields["importance"]
+    description = (field_info.description or "").lower()
+
+    assert "thesis-carrying" in description
+    assert "load-bearing" in description
+
+
+def test_prompt_has_core_data_carve_out_for_quantitative_claims():
+    """Live spot-check finding: individual vote tallies (e.g. "ES-11/1 drew
+    141 votes in favour") dropped from 4 to 3 under the plain rubric,
+    which would let them escape the D10 >= 4 support-confirmation gate --
+    exactly the planted-error scenario D10 exists to catch. A quantitative
+    claim reporting the CORE DATA the draft's analysis rests on must be
+    rated 4 (directly load-bearing) even though the argument might survive
+    any single such figure being wrong. Incidental figures (background
+    population shares, date ranges, counts of sections/resolutions) stay
+    2-3."""
+    prompt = TRIAGE_SYSTEM_PROMPT.lower()
+
+    assert "core data" in prompt
+    assert "vote" in prompt and "141" in prompt
+    assert "incidental" in prompt
+    assert "population shares" in prompt or "date ranges" in prompt

@@ -1302,3 +1302,56 @@ class TestD10SupportConfirmation:
 
         # Should not raise
         await apply_cross_checks([record], manifest, handlers)
+
+
+# ===================================================================
+# TG M3: configurable CROSS_CHECK_IMPORTANCE_THRESHOLD
+# ===================================================================
+#
+# The threshold value (4) is a deliberate user decision and stays the
+# default. This only verifies D4/D5/D10 read the module-level constant at
+# call time, so tests (and, in prod, config.toml's
+# pipeline.cross_check_importance_threshold) can override it -- mirroring
+# how SUPPORT_CONFIRMATION_ENABLED is patched above.
+
+
+class TestConfigurableImportanceThreshold:
+    @pytest.mark.asyncio
+    async def test_d10_importance_3_no_check_at_default_threshold(self):
+        """importance=3 does not fire D10 at the default threshold (4)."""
+        record = _make_d10_record(importance=3)
+        web_handler = _mock_web_handler_side_effect()
+        handlers = {"corpus": _mock_corpus_handler_side_effect(), "web": web_handler}
+        manifest = corpus_and_web_manifest()
+
+        await apply_cross_checks([record], manifest, handlers)
+
+        web_handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_d10_importance_3_fires_when_threshold_lowered(self):
+        """Patching CROSS_CHECK_IMPORTANCE_THRESHOLD to 3 widens D10 to
+        cover importance=3 claims."""
+        record = _make_d10_record(importance=3)
+        web_handler = _mock_web_handler_side_effect()
+        handlers = {"corpus": _mock_corpus_handler_side_effect(), "web": web_handler}
+        manifest = corpus_and_web_manifest()
+
+        with patch("ingest.routing.CROSS_CHECK_IMPORTANCE_THRESHOLD", 3):
+            await apply_cross_checks([record], manifest, handlers)
+
+        web_handler.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_d10_importance_4_no_check_when_threshold_raised(self):
+        """Patching CROSS_CHECK_IMPORTANCE_THRESHOLD to 5 tightens D10,
+        excluding importance=4 claims that fire at the default."""
+        record = _make_d10_record(importance=4)
+        web_handler = _mock_web_handler_side_effect()
+        handlers = {"corpus": _mock_corpus_handler_side_effect(), "web": web_handler}
+        manifest = corpus_and_web_manifest()
+
+        with patch("ingest.routing.CROSS_CHECK_IMPORTANCE_THRESHOLD", 5):
+            await apply_cross_checks([record], manifest, handlers)
+
+        web_handler.assert_not_awaited()

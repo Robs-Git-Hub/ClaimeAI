@@ -1,37 +1,35 @@
 # Session Handover
 
-**Last Updated:** 2026-07-25 (Session 12, outgoing)
-**Current Status:** Phase 05 COMPLETE (closed Session 12). All milestone criteria met including live source-conflict demonstration. 488 tests. Next: Phase 06 planning or backlog items.
+**Last Updated:** 2026-07-25 (Session 13, outgoing)
+**Current Status:** All phases through 05 COMPLETE. Session 13 backlog maintenance COMPLETE (4 fixes, 32 new tests, 523 total). Backlog clear. Next: Phase 06 planning (Deep Research Commissions).
 
 ---
 
 ## Start Here
 
-**Outgoing session completed:** Phase 05 CLOSED. Two design amendments (user-approved) plus the live source-conflict demonstration:
+**Outgoing session completed:** Session 13 — backlog maintenance clearing four items before Phase 06 planning:
 
-1. **D10 — support confirmation** (supersedes part of D5): vault/corpus-supported claims with importance ≥ 4 now get ONE independent web confirmation check. Rationale: a false fact shared by vault and draft previously passed with no independent check; user's verification-conservatism principle (missed errors are worst case) outweighed the Session 10 cost guardrail. User chose the ≥ 4 gate over the recommended ≥ 5, accepting ~2x web calls. Config switch: `support_confirmation` in config.toml (default true). Implemented in `_needs_support_confirm()` (`ingest/routing.py`), wired into `apply_cross_checks()`.
-2. **Alias-based cited-note resolution**: `gather_evidence()` resolved wikilinks by filename stem only — `[[de Carvalho 2025]]` silently failed against `SOURCE-de-carvalho-2025-shifting-alliances.md`. Now `build_vault_index()` (`ingest/vault_serializer.py`) indexes notes by filename AND frontmatter `aliases` (filename wins; ambiguous aliases dropped — same conservatism as `map_citations_to_document_ids`). **Vault-side lint still needed** (sibling repo): every SOURCE note should carry an "Author Year" alias. Obsidian-authored links carry real filenames, so this is defense-in-depth for hand-written links.
-3. **Source-conflict demonstrated live** (TG 05.5.2b): fixture at `tests/fixtures/conflict-demo/` — tiny committed vault with planted false tally ("140 votes in favour"; truth 141) + draft repeating the error. Run: vault_supported → D10 web confirmation → web Refuted (141) → `source-conflict` + REVISE-CLAIM in report. Command: `poetry run python scripts/run_heavy.py tests/fixtures/conflict-demo/draft.md --vault tests/fixtures/conflict-demo/vault-main --argument-pyramid conflict-demo`
-4. **Cited-file milestone run**: `workspace/inbox/ukraine-intro-cited-test.md` (wikilinked variant of the standard test file) demonstrated citation-aware corpus scoping live: 16 claims, 8 vault / 4 corpus / 4 web, corpus→web cascade, ~2 min.
-5. **Cost doc updated** (`docs/websearch-and-costs.md`): corpus profile (~$0.01–0.02/claim), D10 impact, Session 12 run data, Exa credit-cap correction, zero-evidence caveat.
+1. **Zero-evidence "Refuted" bug FIXED.** `VerificationResult` gained `INSUFFICIENT` ("Insufficient Information") and `CONFLICTING` ("Conflicting Evidence"). Empty evidence now returns INSUFFICIENT **without an LLM call** (cost win). LLM failure and unparseable verdict strings also default to INSUFFICIENT (previously all silently became REFUTED). `fact_checker/nodes/generate_report.py` counts all four verdicts. A dead search provider can no longer manufacture false refutations — a burst of *Insufficient* verdicts is now the signal of provider trouble. Note: search-API errors vs genuine zero results are still indistinguishable (both → INSUFFICIENT); error-vs-empty telemetry stays on the backlog.
+2. **Gap-report web-call counter FIXED.** `_render_route_summary` now counts from `route_verdicts` (ground truth for handler invocations): "Web calls made this run: N (X via routing, Y via cross-checks)" + corpus breakdown when nonzero + invocations-vs-searches caveat. The old counter missed all D4/D5/D10 cross-check calls.
+3. **Triage importance recalibrated (user-approved).** Anchored 1–5 rubric (5 thesis-carrying, 4 directly load-bearing, 3 supporting, 2 context, 1 incidental) + "most claims are 2–3" distribution guidance + anti-inflation warning + core-data carve-out (user decision D57): quantitative claims reporting the core data the draft analyzes (e.g. vote tallies in a voting-analysis paper) rate 4; incidental figures stay 2–3. `cross_check_importance_threshold` now configurable in config.toml `[pipeline]` (default 4 unchanged). Live spot-check: standard test file went from 14/17 claims ≥4 (pre-rubric) to 12/17 (post-rubric with carve-out); vote tallies retained at 4 (D10 coverage preserved for the planted-error scenario), incidental figures dropped to 2–3.
+4. **Zeng 2026 corpus ID added.** Sibling repo fixed the null-byte bug (root cause: Unicode PUA chars from Docling font extraction), re-ingested Zeng 2026. New document ID: `d_ZikkNbPZFWWV` — verified live via `list_documents()` AND scoped hybrid search (10 on-topic chunks). Corpus now has all 4 planned papers. Backend metadata filters also live (`GET /documents?title=...` / `?author=...`).
 
 **Incoming session should:**
 
-1. **Decide next phase**: Phase 06 (Deep Research Commissions) planning, or backlog items first (see below).
-2. **Exa is OUT OF CREDITS** (402 NO_MORE_CREDITS observed mid-session). Free tier = $20 sign-up + $10/month refresh (hard cap; rate limits are separate). config.toml committed default is `exa` (user decision) — flip to `tavily` locally for dev runs until Exa refreshes/topped up. Tavily verified working this session (1,000 free credits/month).
-3. **High-value backlog items surfaced this session:**
-   - Zero-evidence web verdicts return "Refuted" instead of insufficient (VerificationResult enum gap). A dead search provider silently produces refutations. Check search-error logs before trusting Refuted verdicts.
-   - Gap report "Web calls made this run" counts routing decisions only — misses D4/D5/D10 cross-check calls (the conflict-demo report said "0 web calls" while making 9).
-   - Vault aliases lint in sibling repo (see amendment 2 above).
-   - Triage importance recalibration: importance clusters ≥ 4, so D10 fires on nearly all vault-resolved claims (9/9 in the demo run) — the gate barely gates. Recalibrating triage's importance guidance would restore cost control.
-4. **Zeng 2026 ingestion** — check if doc-rag-backend has fixed the null-byte bug. If fixed, re-ingest and add document_id to corpus-ids.
+1. **Phase 06 planning** (Deep Research Commissions) — the backlog is clear and the pipeline is stable at 523 tests.
+2. **Exa may still be OUT OF CREDITS** (402 NO_MORE_CREDITS observed Session 12; $10/month auto-refresh). config.toml committed default is `exa` — flip to `tavily` locally if Exa credits haven't refreshed. Tavily verified working (1,000 free credits/month).
+3. **Remaining backlog items** (lower priority):
+   - Vault aliases lint in sibling repo (ClaimeAI side done: `build_vault_index()` indexes aliases)
+   - Sibling-repo prod-DB cleanup: 4 dead Session-9 document shells + 2 ArXiv test docs still in prod
+   - Search error-vs-empty telemetry: `retrieve_evidence` can't distinguish API errors from genuine zero results (both → INSUFFICIENT — correct verdict, but no alerting)
+   - PDF-only drafts / plain-text citation parsing; vault-less heavy runs; semi-automated vault enrichment
 
-**Critical config notes for heavy runs (unchanged):**
+**Critical config notes for heavy runs:**
 - `--vault` path must be the vault ROOT (`vault-main`), NOT `vault-main/v-research` — `load_vault()` appends `v-research` internally. Wrong path silently produces zero vault notes.
 - `--argument-pyramid` value must be `un-ukraine-russia-war-votes-working-paper` for the real vault.
-- Real-vault command: `poetry run python scripts/run_heavy.py workspace/inbox/ukraine-intro-cited-test.md --vault "PATH/vault-main" --argument-pyramid un-ukraine-russia-war-votes-working-paper --corpus-ids d_o3qBk5fESO_q,d_7ZUo22uPGdsf,d_7lRaRsrtAJOW`
+- Real-vault command (4 corpus papers): `poetry run python scripts/run_heavy.py workspace/inbox/ukraine-intro-cited-test.md --vault "PATH/vault-main" --argument-pyramid un-ukraine-russia-war-votes-working-paper --corpus-ids d_o3qBk5fESO_q,d_7ZUo22uPGdsf,d_7lRaRsrtAJOW,d_ZikkNbPZFWWV`
 
-**Phase plans:** `phase-02` through `phase-05` all COMPLETE. Phase 05 plan carries an "Amendment (Session 12)" section documenting D10.
+**Phase plans:** `phase-02` through `phase-05` all COMPLETE. Phase 05 plan carries Amendment (Session 12) for D10 and Resolved (Session 13) for Risk 1 (importance clustering).
 
 ---
 
@@ -43,7 +41,7 @@ Agent packages at root: `claim_extractor/`, `claim_verifier/`, `fact_checker/`, 
 
 ### Configuration
 
-**`config.toml`** — non-sensitive pipeline config. Sections: `[pipeline]` (llm_provider, search_provider, results_per_query, max_search_iterations, summarize_evidence, vault_match_fallback, support_confirmation), `[models.*]` (tier->model mapping per provider), `[reasoning.*]` (reasoning effort per provider/tier), `[corpus_api]` (base_url, mode, top_k).
+**`config.toml`** — non-sensitive pipeline config. Sections: `[pipeline]` (llm_provider, search_provider, results_per_query, max_search_iterations, summarize_evidence, vault_match_fallback, support_confirmation, cross_check_importance_threshold), `[models.*]` (tier->model mapping per provider), `[reasoning.*]` (reasoning effort per provider/tier), `[corpus_api]` (base_url, mode, top_k).
 
 **`.env`** — secrets only: `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `EXA_API_KEY`, `TAVILY_API_KEY`, `REDIS_URI`/`REDIS_URL`, `RAG_API_KEY`.
 
@@ -101,10 +99,12 @@ All present: `OPENAI_API_KEY` (sk-proj-, topped up Session 10), `EXA_API_KEY` (U
 54. **D10 — support confirmation** (Session 12, user decision). Vault/corpus-supported + importance ≥ 4 + web-eligible → one web confirmation. Reverses Session 10's "supports never trigger cross-checks" guardrail per verification-conservatism principle. User chose ≥ 4 gate over recommended ≥ 5, accepting ~2x web calls. `support_confirmation` config switch (default true).
 55. **Alias-based note resolution** (Session 12, user decision). Wikilink targets resolve via `build_vault_index()`: filename stem + frontmatter `aliases`. Filename wins; ambiguous aliases dropped entirely. Vault-side lint (SOURCE notes carry "Author Year" aliases) is the sibling repo's job.
 56. **Exa free tier is a hard credit cap** (Session 12 verified). $20 sign-up + $10/month refresh, $7/1k searches; 402 NO_MORE_CREDITS when exhausted. Rate limits are separate. Committed config default stays `exa` (user decision); flip to `tavily` locally during outages.
+57. **Core-data carve-out for importance rubric** (Session 13, user decision). Quantitative claims reporting the core data the draft's analysis rests on (e.g. vote tallies in a voting-analysis paper) rate importance 4 (directly load-bearing) even though the argument might survive any single figure being wrong. Incidental figures (population shares, date ranges, section counts) stay 2–3. Rationale: first spot-check with the anchored rubric dropped tallies to 3, which would have removed D10 coverage from the exact planted-error scenario D10 was built for.
+58. **`cross_check_importance_threshold` is now configurable** (Session 13). Default 4 unchanged (user Session 12 decision). Raise to 5 to tighten cost control; lower to widen confirmation coverage. Config key: `[pipeline] cross_check_importance_threshold`.
 
 ### Test suite
 
-491 tests total (488 pass with `-m "not slow"`, 3 slow tests). Session 12 added 20: 8 D10 (test_routing.py), 1 conflict-demo fixture guard (test_vault_serializer.py), 10 alias parsing/indexing (test_vault_serializer.py), 1 alias end-to-end (test_alignment.py).
+523 tests total (520 pass with `-m "not slow"`, 3 slow tests). Session 13 added 32: 10 (test_evaluate_evidence.py, new), 13 (test_gap_report.py), 6 (test_triage.py), 2 (test_config.py), 3 (test_routing.py). Note: 2 were adjustments to existing test counts for generate_report.py coverage inside test_evaluate_evidence.py.
 
 | File | Count | Covers |
 |------|-------|--------|
@@ -112,7 +112,7 @@ All present: `OPENAI_API_KEY` (sk-proj-, topped up Session 10), `EXA_API_KEY` (U
 | test_settings.py | 18 | Pydantic settings, env var validation, RAG_API_KEY |
 | test_ingest.py | 31 | PDF extraction, chunking, text dispatch, report rendering |
 | test_cost_tracking.py | 12 | Search cost counter, estimates, free-tier balance, print_summary |
-| test_config.py | 10 | TOML loading, sections, fallbacks, real config.toml validation, corpus_api section |
+| test_config.py | 12 | TOML loading, sections, fallbacks, real config.toml validation, corpus_api, cross_check_importance_threshold |
 | test_claim_record.py | 28 | ClaimRecord, enums incl. CorpusVerdict, conflict_flags, DraftPosition, RouteVerdict, serialization |
 | test_run_config.py | 24 | ResourceManifest, RunProfile, available_routes incl. corpus, vault-less degradation |
 | test_draft_parser.py | 25 | Wikilink parsing, stripping, author-year detection, sentence splitting, ParsedDraft |
@@ -120,28 +120,32 @@ All present: `OPENAI_API_KEY` (sk-proj-, topped up Session 10), `EXA_API_KEY` (U
 | test_vault_serializer.py | 35 | Vault note parsing, filtering, serialization, token counting, alias parsing, build_vault_index collision handling, conflict-demo fixture guard (33 narrow + 2 slow) |
 | test_alignment.py | 23 | gather_evidence (8 + 1 alias resolution), evaluate_alignment (12 + 2 fallback) |
 | test_vault_match.py | 42 | batch_match_claims, verify_matches, fallback, supersede, keywords, contradiction |
-| test_gap_report.py | 33 | assign_suggested_actions, render_gap_report, serialize_results, detect_conflicts, source-conflict rendering, single-lineage annotation |
-| test_triage.py | 13 | Batch triage, conservative fallback, importance clamping, prompt content |
-| test_routing.py | 80 | Policy rows, cascade (normalize_verdict, execute_routing multi-round), D4/D5/D10 cross-checks, extensibility proof |
+| test_evaluate_evidence.py | 10 | VerificationResult enum (4 members), empty-evidence guard, LLM-failure→INSUFFICIENT, generate_report summary |
+| test_gap_report.py | 46 | assign_suggested_actions (incl. INSUFFICIENT/CONFLICTING pin), render_gap_report, serialize_results, detect_conflicts, source-conflict rendering, single-lineage annotation, route-call counter (cross-check breakdown) |
+| test_triage.py | 18 | Batch triage, conservative fallback, importance clamping, anchored rubric, core-data carve-out, prompt content |
+| test_routing.py | 83 | Policy rows, cascade (normalize_verdict, execute_routing multi-round), D4/D5/D10 cross-checks, configurable threshold, extensibility proof |
 | test_evidence_summarization.py | 11 | On/off switch, extract mapping, refuting content, fallback paths |
 | test_corpus_client.py | 22 | Search request/response, pagination, citation mapping, degradation |
 | test_corpus_route.py | 23 | Handler verdicts, provenance, factory wiring, citation-aware scoping, manifest gating |
 | test_orchestration.py | 25 | Pipeline composition, no-vault degrade, corpus wiring with documents, CLI parsing, cross-checks wiring |
 | test_ingest.py (slow) | 1 | Docling PDF extraction (~16s) |
 
-### Phase 05 new/modified files (Session 11)
+### Session 13 modified files (Backlog Maintenance)
 
 | File | Changes |
 |------|---------|
-| `ingest/routing.py` | +306 lines: `normalize_verdict()`, `_is_cascade_silent()`, cascade in `execute_routing()`, `_redecide()`, `apply_cross_checks()` with `_needs_d4()`/`_needs_d5()` |
-| `ingest/corpus_route.py` | +89 lines: `documents` param on factory, `_resolve_search_scope()`, `corpus_cited_doc` provenance type |
-| `ingest/gap_report.py` | +172 lines: `detect_conflicts()`, `_opposing()`, `_is_single_lineage()`, `_render_source_conflict()`, vault-corpus mismatch section |
-| `utils/claim_record.py` | +9 lines: `conflict_flags: List[str]` field |
-| `scripts/run_heavy.py` | +25 lines: `list_documents()` pre-fetch, `apply_cross_checks()` wiring, `detect_conflicts()` wiring |
-| `docs/playbook/claim-record-design.md` | Phase 05 section: normalization table, lineage groups, conflict flags, cross-check gates |
-| `CLAUDE.md` | Pipeline section rewritten for cascade |
+| `claim_verifier/schemas.py` | +2 lines: `INSUFFICIENT`, `CONFLICTING` enum members on `VerificationResult` |
+| `claim_verifier/nodes/evaluate_evidence.py` | Empty-evidence guard (skip LLM call → INSUFFICIENT); failure/fallback defaults REFUTED → INSUFFICIENT |
+| `fact_checker/nodes/generate_report.py` | Count dict built from all `VerificationResult` members; summary reports all nonzero verdicts |
+| `ingest/gap_report.py` | `_route_call_counts()` counts from `route_verdicts`; cross-check breakdown in report |
+| `ingest/triage.py` | Anchored 1–5 importance rubric + distribution guidance + core-data carve-out |
+| `ingest/routing.py` | `CROSS_CHECK_IMPORTANCE_THRESHOLD` now config-driven (3 lines changed) |
+| `config.toml` | `cross_check_importance_threshold = 4` added to `[pipeline]` |
+| `docs/websearch-and-costs.md` | Zero-evidence caveat → fixed; D10 cost recalibration note |
+| `docs/playbook/claim-record-design.md` | D6 table: web route now emits INSUFFICIENT/CONFLICTING (Session 13 note) |
+| `project-management/phase-plans/phase-05-...md` | Risk 1 resolved; Zeng 2026 dependency updated |
 
-### Hetzner / doc-rag-backend state (Session 9, unchanged)
+### Hetzner / doc-rag-backend state (updated Session 13)
 
 | Item | Status |
 |------|--------|
@@ -151,7 +155,8 @@ All present: `OPENAI_API_KEY` (sk-proj-, topped up Session 10), `EXA_API_KEY` (U
 | Supabase prod | `prod-ragtogo` (ref `rmxgiszgfycfwlfurdvu`) |
 | Pinecone prod | `doc-rag-prod` (1536 dims, serverless) |
 | DOC_RAG_API_KEY | Provisioned Session 9 (64-char hex) |
-| Ingestion | 3 of 4 papers ingested; Zeng 2026 blocked by null-byte bug |
+| Ingestion | All 4 papers ingested (Zeng 2026 null-byte fix landed Session CA) |
+| Metadata filters | Live — `GET /documents?title=...` / `?author=...` (Phase 19) |
 
 **Corpus document IDs (prod, live):**
 
@@ -160,7 +165,9 @@ All present: `OPENAI_API_KEY` (sk-proj-, topped up Session 10), `EXA_API_KEY` (U
 | `d_o3qBk5fESO_q` | Nurullayev & Papa 2023 | Ingested, hybrid search verified |
 | `d_7ZUo22uPGdsf` | Kim 2023 | Ingested, hybrid search verified |
 | `d_7lRaRsrtAJOW` | de Carvalho 2025 | Ingested, hybrid search verified |
-| -- | Zeng 2026 | Blocked (null-byte bug in backend) |
+| `d_ZikkNbPZFWWV` | Zeng 2026 | Ingested Session CA, verified Session 13 (list + scoped search, 10 chunks) |
+
+Note: 4 dead document shells from Session 9's failed ingestion + 2 ArXiv test docs remain in prod DB — cleanup is the sibling repo's job.
 
 ---
 
@@ -180,3 +187,4 @@ All present: `OPENAI_API_KEY` (sk-proj-, topped up Session 10), `EXA_API_KEY` (U
 | 2026-07-25 | Session 10: Phase 04 CLOSED. Phase 05 designed and approved. 403 tests. |
 | 2026-07-25 | Session 11: Phase 05 TGs 05.1–05.4 implemented. Cascade routing, citation-aware scoping, D4/D5 cross-checks, conflict detection. Live milestone (cascade verified, source-conflict pending cited test file). 471 tests. |
 | 2026-07-25 | Session 12: Phase 05 CLOSED. D10 support-confirmation amendment, alias-based note resolution, conflict-demo fixture, source-conflict demonstrated live. Cited-file corpus-scoping run. Cost doc updated. Exa credits exhausted (hard-cap confirmed). 488 tests. |
+| 2026-07-25 | Session 13: Backlog maintenance — 4 fixes (zero-evidence verdicts, web-call counter, triage importance recalibration + core-data carve-out, Zeng 2026 corpus ID). 32 new tests, 523 total. Backlog clear for Phase 06. |

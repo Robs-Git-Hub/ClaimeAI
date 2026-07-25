@@ -24,22 +24,32 @@ async def generate_report_node(state: State) -> Dict[str, FactCheckReport]:
     """
     logger.info("Generating final fact-check report")
 
-    # Count claims by verification result
-    result_counts = {
-        VerificationResult.SUPPORTED: 0,
-        VerificationResult.REFUTED: 0,
-    }
+    # Count claims by verification result. Cover every VerificationResult
+    # member (not just Supported/Refuted) so Insufficient/Conflicting
+    # verdicts are counted instead of silently dropped from the summary.
+    result_counts = {result: 0 for result in VerificationResult}
 
     for verdict in state.verification_results:
-        if verdict.result in result_counts:
-            logger.info(f"Verdict for '{verdict.claim_text}': {verdict.result}")
-            result_counts[verdict.result] += 1
+        logger.info(f"Verdict for '{verdict.claim_text}': {verdict.result}")
+        result_counts[verdict.result] += 1
 
-    # Generate summary text
+    # Generate summary text. Insufficient/Conflicting are only mentioned
+    # when nonzero, keeping the common-case message unchanged.
+    summary_parts = [
+        f"{result_counts[VerificationResult.SUPPORTED]} supported",
+        f"{result_counts[VerificationResult.REFUTED]} refuted",
+    ]
+    if result_counts[VerificationResult.INSUFFICIENT]:
+        summary_parts.append(
+            f"{result_counts[VerificationResult.INSUFFICIENT]} insufficient"
+        )
+    if result_counts[VerificationResult.CONFLICTING]:
+        summary_parts.append(
+            f"{result_counts[VerificationResult.CONFLICTING]} conflicting"
+        )
     summary = (
         f"Fact-check complete. Of {len(state.verification_results)} claims verified: "
-        f"{result_counts[VerificationResult.SUPPORTED]} supported, "
-        f"{result_counts[VerificationResult.REFUTED]} refuted"
+        + ", ".join(summary_parts)
     )
 
     # Create the final report

@@ -360,9 +360,58 @@ Session 12 findings for the backlog (recorded below): web evaluator returns "Ref
 
 ---
 
+## Session 13: Backlog Maintenance — COMPLETE (Session 13)
+
+Clears the four high-value backlog items before Phase 06 planning. Not a phase — one-session maintenance recorded here at task level (no separate phase-plan file). TDD throughout: red first, then green. Tiers: NARROW during iteration, MID at TG completion, FULL once before the wrap commit.
+
+### TG M1: Zero-Evidence Web Verdicts (correctness bug)
+
+Root cause: `VerificationResult` enum lacks INSUFFICIENT/CONFLICTING (commented out in `claim_verifier/schemas.py`); evaluator prompt already offers both strings, so LLM answers hit the `ValueError` catch in `evaluate_evidence.py` and silently default to REFUTED. Same default on LLM failure. Empty evidence list goes to the LLM as "no snippets found" prose. CLAUDE.md already documents the 4-verdict vocabulary — code catches up to docs. `routing.py:_VERDICT_MAP` already maps both new strings → silent (no cascade change needed).
+
+- [x] M1.1a Failing tests written first in NEW `tests/test_evaluate_evidence.py` (10 tests; red confirmed: 9/10 failed pre-implementation) → NARROW
+- [x] M1.1b Implemented: INSUFFICIENT + CONFLICTING added to `VerificationResult` (exact strings match `_VERDICT_MAP`); empty-evidence guard returns INSUFFICIENT with NO LLM call; LLM-failure fallback and unparseable-verdict default both REFUTED → INSUFFICIENT → NARROW (21 pass incl. evidence-summarization file)
+- [x] M1.2a/b `generate_report.py` count dict now built from all `VerificationResult` members; summary appends insufficient/conflicting only when nonzero → NARROW
+- [x] M1.3 Gap-report fall-through pinned: web INSUFFICIENT/CONFLICTING → ADD_CITATION (citation-free) / UNRESOLVED (cited), never ADD_VAULT_NOTE (4 tests, behavior already correct) → NARROW
+- [x] M1.4 TG M1 complete — regression → MID (519 passed)
+
+Acceptance: a dead search provider (empty evidence) can no longer produce a Refuted verdict; no live run needed (unit-provable).
+
+### TG M2: Gap-Report Web-Call Counter (reporting bug)
+
+`_render_route_summary` counts only `routing_decision`; D4/D5/D10 cross-checks append to `route_verdicts` without touching it (conflict-demo said "0 web calls" while making 9).
+
+- [x] M2.1a Failing tests written first in `tests/test_gap_report.py` (9 tests incl. conflict-demo shape 0-routing/9-cross-check reproduction, handler_error counting, no-double-count; red confirmed) → NARROW
+- [x] M2.1b Implemented `_route_call_counts()` in `ingest/gap_report.py`: counts from `route_verdicts` (ground truth for invocations); report lines now "Web calls made this run: N (X via routing, Y via cross-checks)" + corpus line when nonzero + invocations-vs-searches caveat → NARROW (40 pass)
+- [x] M2.2 TG M2 complete — regression → MID (519 passed)
+
+Acceptance: unit tests reproduce the conflict-demo shape (0 routing-decision web calls + 9 cross-check verdicts) and the report shows 9. No live rerun (would cost ~9 web calls for no added confidence).
+
+### TG M3: Triage Importance Recalibration (cost control)
+
+Prompt gives importance one unanchored line while other axes get worked examples — clusters at 4+, so D10 fires on ~all vault-resolved claims. Session 12 user decision on the ≥4 gate VALUE stands; this TG fixes the input distribution and makes the threshold configurable without changing its default.
+
+- [x] M3.1a Failing tests written first in `tests/test_triage.py` (5 tests: rubric anchors, distribution guidance, anti-inflation, Field mirror, core-data carve-out; red confirmed) → NARROW
+- [x] M3.1b Anchored rubric implemented in `TRIAGE_SYSTEM_PROMPT` + Field description (5 thesis-carrying … 1 incidental; "most claims are 2–3" anchor; anti-inflation warning) → NARROW
+- [x] M3.1c (user decision, Session 13) Core-data carve-out: quantitative claims reporting the core data the draft's analysis rests on (e.g. vote tallies in a voting-analysis paper) rate 4; incidental figures (population shares, date spans, section counts) stay 2–3. First spot-check had dropped tallies to 3, which would have removed D10 coverage from the exact planted-error scenario D10 was built for → NARROW (18 pass)
+- [x] M3.2a/b `cross_check_importance_threshold` config-driven in `[pipeline]` (default 4, behavior unchanged); gate tests monkeypatch the module constant per SUPPORT_CONFIRMATION_ENABLED pattern → NARROW (111 pass across triage/config/routing)
+- [x] M3.3 Live spot-check ×2 (one mid-tier call each, 0 searches) on standard test file claims: pre-carve-out 9/17 ≥4 (tallies dropped to 3 — flagged to user); post-carve-out 12/17 ≥4 with tallies restored to 4, single 5 (was three 5s), incidental figures at 3. Old baseline: 14/17. Accepted.
+- [x] M3.4 TG M3 complete — regression → MID (520 passed)
+
+### TG M4: Zeng 2026 Corpus ID + Docs (config/docs)
+
+Sibling repo fixed null-byte bug (PUA chars from Docling), re-ingested Zeng 2026: `d_ZikkNbPZFWWV` (all stages complete). No pipeline code change — IDs are CLI-passed.
+
+- [x] M4.1 Live-verified: `d_ZikkNbPZFWWV` in prod `list_documents()` AND hybrid search scoped to it returns 10 on-topic chunks (first hit: UN resolutions table). Also observed: 4 dead Session-9 document shells + 2 ArXiv test docs still in prod DB — cleanup noted for sibling repo.
+- [x] M4.2 Updated: HANDOVER.md (corpus table + 4-ID real-vault command + Session 13 summary), phase-05 plan (Risk 1 resolved, Zeng dependency updated), websearch-and-costs.md (zero-evidence fixed, D10 recalibration), claim-record-design.md (web route emits INSUFFICIENT/CONFLICTING)
+- [x] M4.3 Session wrap: FULL suite 523 passed; HANDOVER.md + TASKS.md updated; committed
+
+---
+
 ## Phases 06–07: Roadmap — FUTURE
 
 - **Phase 06 — Deep Research Commissions:** human-approved escalation, commission writer, response-paper ingestion + re-evaluation
 - **Phase 07 — Draft Update Loop:** propose citation-inserting draft edits after vault improvement
 
-**Edge-case backlog:** PDF-only drafts / plain-text citation parsing; source fetching for absent papers; vault-less heavy runs; vault QA / chain completeness (verify vault notes against original sources — separate domain from draft-claim verification, likely reuses doc-rag-backend); semi-automated vault enrichment; triage importance-distribution recalibration (Phase 05 Risk 1, sharpened by D10: importance clusters ≥ 4 so support-confirmation fires broadly); zero-evidence web verdicts return "Refuted" instead of insufficient (VerificationResult enum gap — dead search provider silently produces refutations, observed Session 12 during Exa outage); gap-report "web calls made" counter misses D4/D5/D10 cross-check invocations (undercounts); vault-side aliases lint (every SOURCE note carries an "Author Year" alias so hand-written wikilinks resolve — ClaimeAI side landed Session 12 as `build_vault_index()`)
+**Edge-case backlog:** PDF-only drafts / plain-text citation parsing; source fetching for absent papers; vault-less heavy runs; vault QA / chain completeness (verify vault notes against original sources — separate domain from draft-claim verification, likely reuses doc-rag-backend); semi-automated vault enrichment; vault-side aliases lint (every SOURCE note carries an "Author Year" alias so hand-written wikilinks resolve — ClaimeAI side landed Session 12 as `build_vault_index()`); sibling-repo prod-DB cleanup (4 dead Session-9 document shells + 2 ArXiv test docs observed Session 13); retrieve_evidence still can't distinguish search-API errors (e.g. 402) from genuine zero results — both return empty evidence and now yield INSUFFICIENT (correct verdict since Session 13, but error-vs-empty telemetry would help spot dead providers faster)
+
+Cleared Session 13 (see Session 13: Backlog Maintenance above): zero-evidence Refuted bug; gap-report web-call undercount; triage importance recalibration + configurable cross-check threshold; Zeng 2026 corpus ID (`d_ZikkNbPZFWWV`).

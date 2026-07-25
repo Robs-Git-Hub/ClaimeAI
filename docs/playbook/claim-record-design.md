@@ -31,7 +31,7 @@ The multi-attribute claim record is the data contract for Phases 02–05. Each c
 
 ### VaultVerdict
 
-Route-specific verdicts for vault-based verification. Separate from `VerificationResult` (Supported/Refuted) which is web-route-specific.
+Route-specific verdicts for vault-based verification. Separate from `VerificationResult` (`Supported` / `Refuted` / `Insufficient Information` / `Conflicting Evidence`, Session 13) which is web-route-specific.
 
 | Value | Route | Meaning |
 |-------|-------|---------|
@@ -292,14 +292,20 @@ chunk, with section names appended when known`>`, `provenance_type=
 ### Evaluation reuse decision
 
 The corpus route does **not** call `claim_verifier.nodes.evaluate_evidence`.
-That node's structured-output verdict field is typed
-`claim_verifier.schemas.VerificationResult`, whose enum only actually
-contains `Supported`/`Refuted` (`Insufficient Information` is commented out
-of the enum even though the prompt text still describes it) — it cannot
-represent the `corpus_insufficient` value this route's fixed vocabulary
-requires, without editing `claim_verifier/schemas.py` (out of scope this
-phase; compose, don't modify). Instead, `ingest/corpus_route.py` writes a
-small, route-local high-tier evaluator following the house style of
+At the time of this decision (Phase 04), that node's structured-output
+verdict field, typed `claim_verifier.schemas.VerificationResult`, only
+actually contained `Supported`/`Refuted` (`Insufficient Information` was
+commented out of the enum even though the prompt text still described it)
+— it could not represent the `corpus_insufficient` value this route's fixed
+vocabulary requires. **Session 13** added `INSUFFICIENT`/`CONFLICTING`
+members to `VerificationResult`, closing that gap for the web route — but
+the corpus route's reasoning still holds: `corpus_supported` /
+`corpus_contradicted` / `corpus_insufficient` / `no_corpus_hits` is its own
+fixed vocabulary, distinct from web's `Supported` / `Refuted` /
+`Insufficient Information` / `Conflicting Evidence`, and the corpus route's
+provenance format (`document_id#chunk_id`) shares nothing with web's URL
+provenance. Instead, `ingest/corpus_route.py` writes a small, route-local
+high-tier evaluator following the house style of
 `ingest/alignment.py:evaluate_alignment` (`get_llm(tier="high")` +
 `with_structured_output`). Summarization is still reused unmodified from
 `claim_verifier/evidence_summarization.py` and runs exactly once per claim,
@@ -366,6 +372,8 @@ Every route verdict maps to one of three normalized values. The function
 | `Conflicting Evidence` | `silent` | web |
 | `handler_error` | `silent` | cascade infrastructure |
 | (anything else) | `silent` | future-proofing |
+
+**Session 13:** the web route's `VerificationResult` enum previously defined only `SUPPORTED`/`REFUTED` — `Insufficient Information`/`Conflicting Evidence` were described in the prompt but not representable, so empty evidence, an LLM failure, or an unparseable verdict all fell through a `ValueError` fallback to `REFUTED`. The enum now has `INSUFFICIENT`/`CONFLICTING` members and the web route actually emits them. The normalization table above already treated both strings as `silent`; `normalize_verdict()` itself needed no change.
 
 ### Cascade routing (D1)
 

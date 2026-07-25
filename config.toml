@@ -26,6 +26,10 @@ support_confirmation = true     # D10 (Session 12 amendment): a claim whose vaul
                                  # it) -- catches a false fact the author's own vault/draft share.
                                  # false = restores pre-amendment behavior (supports never
                                  # trigger routine cross-checks, D5's original guardrail)
+cross_check_importance_threshold = 4  # minimum triage `importance` for the D4/D5/D10
+                                 # cross-checks to fire (ingest/routing.py CROSS_CHECK_IMPORTANCE_THRESHOLD).
+                                 # Raise to 5 to tighten cost control (fewer cross-checks);
+                                 # lower to widen confirmation coverage (more web/corpus calls).
 
 [models.openai]
 low = "openai:gpt-4o-mini"

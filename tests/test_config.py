@@ -111,3 +111,15 @@ def test_real_config_toml_loads():
         assert result["corpus_api"]["base_url"] == "https://api.ragtogo.com"
         assert result["corpus_api"]["mode"] == "hybrid"
         assert result["corpus_api"]["top_k"] == 10
+        # TG M3: cross_check_importance_threshold defaults to 4 in the real
+        # config (D4/D5/D10 gate value -- a deliberate user decision, unchanged
+        # by this task; only its configurability is new).
+        assert result["pipeline"].get("cross_check_importance_threshold") == 4
+
+
+def test_reads_cross_check_importance_threshold_override(config_file):
+    """TG M3: [pipeline].cross_check_importance_threshold is config-switchable
+    (default 4, see ingest/routing.py CROSS_CHECK_IMPORTANCE_THRESHOLD)."""
+    path = config_file("[pipeline]\ncross_check_importance_threshold = 5\n")
+    result = _load_config(path)
+    assert result["pipeline"]["cross_check_importance_threshold"] == 5

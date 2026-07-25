@@ -92,7 +92,7 @@ User-approved this session. Test coverage: `TestD10SupportConfirmation` in `test
 ## Dependencies
 
 - Phase 04 offline implementation (corpus client, route handler, CLI wiring) — complete, 400 tests green.
-- Live corpus with the 3 ingested papers (`d_o3qBk5fESO_q` Nurullayev & Papa 2023, `d_7ZUo22uPGdsf` Kim 2023, `d_7lRaRsrtAJOW` de Carvalho 2025). **Zeng 2026 is not a blocker**: Zeng's ingestion (pending the doc-rag-backend null-byte fix, cross-repo note 2026-07-25) enriches the corpus when it lands; the milestone does not wait for it.
+- Live corpus with all 4 ingested papers (`d_o3qBk5fESO_q` Nurullayev & Papa 2023, `d_7ZUo22uPGdsf` Kim 2023, `d_7lRaRsrtAJOW` de Carvalho 2025, `d_ZikkNbPZFWWV` Zeng 2026). **Zeng 2026 ingested (Session 13):** the sibling repo's null-byte fix landed; Zeng is live in prod, verified via `list_documents` and a scoped hybrid search (10 on-topic chunks returned).
 - OpenAI account topped up (Session 10) — either provider works for the milestone.
 
 ## Task Groups
@@ -178,7 +178,7 @@ Task breakdown within each TG is the implementing session's job. Implementation 
 
 ## Risks and known failure modes
 
-1. **Importance clustering blunts the gate.** In the Session 10 run, 12 of 16 claims scored importance ≥ 4 — the D4/D5 gate barely gates. Mitigation: D4/D5 are structurally narrow (cited-and-mapped; refutations only), so cost stays bounded even with a permissive gate. Observe the distribution at the milestone; if cross-check volume is high, recalibrating the triage prompt's importance guidance is a follow-up decision, not a silent tweak.
+1. **Importance clustering blunts the gate.** In the Session 10 run, 12 of 16 claims scored importance ≥ 4 — the D4/D5 gate barely gates. Mitigation: D4/D5 are structurally narrow (cited-and-mapped; refutations only), so cost stays bounded even with a permissive gate. Observe the distribution at the milestone; if cross-check volume is high, recalibrating the triage prompt's importance guidance is a follow-up decision, not a silent tweak. **Resolved (Session 13):** triage now uses an anchored 1–5 rubric (5 thesis-carrying, 4 directly load-bearing, 3 supporting, 2 context, 1 incidental) plus a core-data carve-out — quantitative claims reporting the draft's central data (e.g. vote tallies) stay at 4 — and `cross_check_importance_threshold` is now a configurable `config.toml` `[pipeline]` key (default 4). A live spot-check on the standard test file moved the distribution from 14/17 claims ≥ 4 to 12/17, with the planted-tally-error scenario retaining D10 coverage via the carve-out.
 2. **Cascade latency adds a serial corpus stage** before web for unresolved claims. Corpus is the fast tier (no iteration loop), so expected wall-clock impact is small; measure at milestone.
 3. **Whole-corpus search noise.** Citation-free claims searching a multi-document corpus may retrieve plausible-but-wrong passages. Mitigations already in place: high-tier evaluation, honest `corpus_insufficient`, summarization safeguards. Scoping (D3) removes this risk for cited claims.
 4. **Double-lineage bookkeeping bugs** (same claim, verdicts from 3 tiers) could confuse `assign_suggested_actions`. Constraint: Phase 02's action-assignment semantics must be revisited deliberately in TG 05.4, not patched ad hoc — a claim with `source-conflict` outranks its individual verdicts for action purposes.
@@ -206,4 +206,4 @@ Task breakdown within each TG is the implementing session's job. Implementation 
 
 ## Roadmap after this phase
 
-Phase 06 (Deep Research Commissions), Phase 07 (Draft Update Loop). The edge-case backlog carries forward; add: triage importance-distribution recalibration (Risk 1, sharpened by D10 — importance clusters ≥ 4 so support-confirmation fires broadly); zero-evidence web verdicts (VerificationResult enum gap); gap-report web-call counter undercounting D4/D5/D10 calls; vault-side aliases lint (SOURCE notes carrying "Author Year" aliases).
+Phase 06 (Deep Research Commissions), Phase 07 (Draft Update Loop). The edge-case backlog carries forward; add: ~~triage importance-distribution recalibration (Risk 1, sharpened by D10 — importance clusters ≥ 4 so support-confirmation fires broadly)~~ **resolved (Session 13)** — see Risk 1; ~~zero-evidence web verdicts (VerificationResult enum gap)~~ **fixed (Session 13)** — `VerificationResult` gained `INSUFFICIENT`/`CONFLICTING`, see `docs/websearch-and-costs.md`; ~~gap-report web-call counter undercounting D4/D5/D10 calls~~ **fixed (Session 13)** — counter now derives from `route_verdicts`, broken out as routing vs cross-checks; vault-side aliases lint (SOURCE notes carrying "Author Year" aliases).

@@ -67,6 +67,28 @@ async def evaluate_evidence_node(state: ClaimVerifierState) -> dict:
         f"after {iteration_count} iterations"
     )
 
+    # TG M1: zero evidence (e.g. a dead search provider) is never sent to
+    # the high-tier LLM — there is nothing for it to evaluate, and doing so
+    # previously produced false "Refuted" verdicts when the LLM defaulted
+    # instead of the model correctly recognizing insufficiency. Skip the
+    # call entirely rather than downgrading to a cheaper tier.
+    if not evidence_snippets:
+        logger.warning(
+            f"No evidence retrieved for claim '{claim.claim_text}'; "
+            "skipping LLM evaluation and returning Insufficient Information."
+        )
+        verdict = Verdict(
+            claim_text=claim.claim_text,
+            disambiguated_sentence=claim.disambiguated_sentence,
+            original_sentence=claim.original_sentence,
+            original_index=claim.original_index,
+            result=VerificationResult.INSUFFICIENT,
+            reasoning="No evidence was retrieved for this claim (search returned no results); cannot evaluate.",
+            sources=[],
+        )
+        logger.info(f"Verdict '{verdict.result}' for '{claim.claim_text}': {verdict.reasoning} (0 sources)")
+        return {"verdict": verdict}
+
     system_prompt = EVIDENCE_EVALUATION_SYSTEM_PROMPT.format(
         current_time=get_current_timestamp()
     )
@@ -117,7 +139,7 @@ async def evaluate_evidence_node(state: ClaimVerifierState) -> dict:
             disambiguated_sentence=claim.disambiguated_sentence,
             original_sentence=claim.original_sentence,
             original_index=claim.original_index,
-            result=VerificationResult.REFUTED,
+            result=VerificationResult.INSUFFICIENT,
             reasoning="Failed to evaluate the evidence due to technical issues.",
             sources=[],
         )
@@ -126,9 +148,9 @@ async def evaluate_evidence_node(state: ClaimVerifierState) -> dict:
             result = VerificationResult(response.verdict)
         except ValueError:
             logger.warning(
-                f"Invalid verdict '{response.verdict}', defaulting to REFUTED"
+                f"Invalid verdict '{response.verdict}', defaulting to INSUFFICIENT"
             )
-            result = VerificationResult.REFUTED
+            result = VerificationResult.INSUFFICIENT
 
         influential_urls = (
             {

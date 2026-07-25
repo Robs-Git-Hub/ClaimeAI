@@ -82,7 +82,19 @@ class TriageProposal(BaseModel):
         )
     )
     importance: int = Field(
-        description="How load-bearing this claim is to the draft's argument, 1 (least) to 5 (most)"
+        description=(
+            "How load-bearing this claim is to the draft's argument, 1-5: "
+            "5 = thesis-carrying (the argument fails without it), "
+            "4 = directly load-bearing for a main section's conclusion, "
+            "3 = supporting evidence (strengthens but the argument survives "
+            "its loss), 2 = background/context, 1 = incidental detail. "
+            "Most claims in a typical draft are 2-3; do not inflate this "
+            "because a claim is verifiable or interesting -- it measures "
+            "load-bearing-ness only. Exception: a figure from the core "
+            "data the draft's analysis rests on (e.g. an individual vote "
+            "tally) is core data and rates 4, even if incidental figures "
+            "(population shares, date ranges) stay 2-3."
+        )
     )
     reasoning: Optional[str] = Field(
         default=None, description="Brief justification for the classification"
@@ -126,8 +138,30 @@ reported), it is not novel-result.
 
 2. `citation_expectation` — one of: expected, not-expected, optional.
 
-3. `importance` — 1 (least load-bearing) to 5 (most load-bearing to the \
-draft's argument).
+3. `importance` — how load-bearing the claim is to the draft's own \
+argument, 1 (least) to 5 (most):
+   - 5 = thesis-carrying: the draft's argument fails without this claim.
+   - 4 = directly load-bearing for a main section's conclusion.
+   - 3 = supporting evidence: strengthens the argument, but the argument \
+survives its loss.
+   - 2 = background or context.
+   - 1 = incidental detail.
+
+Distribution guidance: in a typical draft, most claims are 2-3. Reserve \
+4-5 for claims whose failure would materially damage the argument -- not \
+merely for claims that are notable or memorable. Do not inflate importance \
+because a claim happens to be easy to verify or is intrinsically \
+interesting; importance measures load-bearing-ness to the argument only, \
+nothing else.
+
+Carve-out for quantitative claims: a claim reporting a figure from the \
+CORE DATA the draft's own analysis rests on is directly load-bearing -- \
+rate it 4 -- even though the argument might survive any single one of \
+those figures being wrong. Example: in a paper analyzing UN voting \
+patterns, an individual vote tally such as "ES-11/1 drew 141 votes in \
+favour" is core data and rates 4. Incidental figures that merely furnish \
+background -- population shares, date ranges, counts of sections or \
+resolutions -- are not core data and stay at 2-3.
 
 Be conservative: if you are uncertain whether a claim is trivial or \
 something more substantial, choose the non-trivial class. A claim wrongly \
