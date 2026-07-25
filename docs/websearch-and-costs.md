@@ -66,15 +66,57 @@ Ran 5 comparator claims (from `phase-06-comparator-set.md`) against `pixserp-web
 
 **Verdict:** complementary strengths — PixSerp handles specific entities well; Tavily handles refutation with counter-evidence well. Neither is a solo replacement for all cases. See `project-management/phase-plan-notes/phase-06/phase-06-search-provider-decision.md` for integration options and the deferred two-stage design.
 
-### Integration notes
+### What PixSerp actually returns (Session 15 deep-dive)
 
-PixSerp returns **synthesized answers**, not raw page content. This differs from Exa (raw text snippets) and Tavily (raw page markdown). Integration options for our pipeline:
+PixSerp returns a **synthesized answer** plus a **structured citations array**. There is no parameter to get raw page content — the API is synthesis-first by design. The `response_format` (structured output) feature returned 502 on all three test attempts (likely not fully deployed); raise with PixSerp support before relying on it.
 
-1. **Use PixSerp's answer as `Evidence.text`** — simplest; the high-tier evaluator receives pre-synthesized content rather than raw source material. Risk: double-synthesis (PixSerp synthesizes, then our evaluator re-evaluates).
-2. **Use cited URLs + fetch stage** (crawl4ai or httpx) for raw content — preserves evaluation integrity but adds complexity and latency.
-3. **Use `pixserp-agent` tier** which does its own multi-step research loop — the closest match to our pipeline's iterative search, but delegates control entirely to PixSerp.
+Each citation carries these fields (verified live):
 
-The `pixserp-standard` or `pixserp-deep` tiers might produce stronger refutation evidence (claim 3) than `pixserp-fast` — worth testing before ruling PixSerp out for that case. The `pixserp-agent` tier could potentially replace our entire search+evaluate loop for web claims.
+| Field | Content | Size |
+|---|---|---|
+| `snippet` | Raw SERP excerpt from the page — the text fragment Google would show | ~130–160 chars |
+| `markdown` | Formatted version: bold title link + snippet | ~300–370 chars |
+| `url` | Source URL | — |
+| `title` | Page title | — |
+| `kind` | `web`, `news`, `place`, `shopping`, etc. | — |
+| `domain` | Domain name | — |
+| `favicon` | Google favicon URL | — |
+| `date`, `source` | Publication date and outlet name (news items only) | — |
+
+Response headers: `x-cost-usd` (exact cost per call, e.g. `0.0015`), `x-pixserp-tool-calls` (internal searches run, typically 2–3).
+
+**The snippets contain real evidence.** For claim 2, the snippet literally reads: *"141 voted for; 5 voted against; 35 abstained; 12 absent"*. For claim 3, news snippets from WashPost and Al Jazeera describe the vote but don't state the exact count in the snippet.
+
+### Content depth comparison
+
+| Provider | What you get per result | Typical size | Raw source? |
+|---|---|---|---|
+| **Tavily** | Full page markdown (`raw_content`) or AI-summarized snippet (`content`) | 134 B – 486 KB | Yes — complete web pages |
+| **Exa** | Page content (neural search, capped at `max_characters`) | Up to 2 KB | Yes — truncated page text |
+| **PixSerp** | SERP snippet (`snippet`) + synthesized answer (`content`) | 130–160 chars per snippet; 400–1000 chars answer | No — snippets only; answer is LLM-synthesized |
+
+This is the structural difference: **Tavily returns whole web pages**, Exa returns truncated page text, and PixSerp returns short snippets plus a synthesized narrative. PixSerp's snippets are focused but thin — they work when the key fact appears in the SERP excerpt (claim 2's vote tally) but fail when the evidence requires reading deeper into the page.
+
+### Integration assessment
+
+**The synthesized answer is a liability for fact-checking and should be discarded.** The matrix test (27 calls across tiers and prompt styles) showed that PixSerp's `pixserp-deep` tier hallucinated a confident wrong answer on claim 5 — *"the package contains fifteen resolutions"* citing an irrelevant SEC filing. Higher tiers increase retrieval depth but not correctness. Our pipeline has its own high-tier evaluator; feeding it a pre-synthesized answer risks compounding errors (PixSerp hallucinates → evaluator trusts the hallucination).
+
+**PixSerp's role in our architecture is one of two things:**
+
+1. **Drop-in Exa replacement** — use the citation `snippet` fields as `Evidence.text`, discard the synthesized answer entirely. At $1.50–2.50/1k vs Exa's $7/1k, this is 3–5× cheaper. Snippets are shorter than Exa's 2 KB cap but more focused. Works well for specific-entity queries (claim 2); weaker for refutation where the counter-evidence isn't in the SERP snippet.
+
+2. **Step 1 (SERP) of the two-stage design** — use PixSerp's citation URLs as the discovery step, then fetch full page content via crawl4ai for evidence evaluation. This gives Google-quality URL discovery (PixSerp's strength, claim 2) plus full-page evidence depth (Tavily's strength, claim 3). Cost: ~$1.50/1k for discovery + $0 marginal for crawl4ai fetch.
+
+**PixSerp cannot replace Tavily's comprehensiveness on its own.** Tavily returns complete web pages (up to 486 KB of raw markdown per result), which is essential when the evidence our evaluator needs is buried deep in the page rather than surfaced in a 150-char SERP snippet. For planted-error refutation (claim 3, where the correct figure "93" appears in the body text but not in the snippet), Tavily's full-page returns are what enable a clear Refuted verdict.
+
+**Recommended provider positioning (when Phase 06 is built):**
+
+| Scenario | Best provider | Why |
+|---|---|---|
+| Specific entities / exact numbers | PixSerp (fast) | Google SERP finds precise facts; snippets carry the data |
+| Refutation / counter-evidence | Tavily or PixSerp+crawl4ai | Need full page text to find contradicting figures |
+| Cost-sensitive bulk runs | PixSerp (fast, $1.50/1k) | 4.7× cheaper than Exa |
+| Maximum evidence depth | Tavily (raw_content) or PixSerp+crawl4ai | Full pages for the evaluator |
 
 ### Corpus route costs
 
