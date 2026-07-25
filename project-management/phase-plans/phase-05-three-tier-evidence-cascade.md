@@ -1,6 +1,6 @@
 # Phase 05: Three-Tier Evidence Cascade
 
-**Status:** IMPLEMENTATION COMPLETE, MILESTONE PARTIAL (Session 11). TGs 05.1–05.4 fully implemented (68 new tests, 471 total). Live cascade demonstrated. Source-conflict flag not demonstrated live — needs a cited test file (see Lessons Learned).
+**Status:** COMPLETE (Session 12). TGs 05.1–05.5 all done. 488 tests (488 non-slow). Cascade + source-conflict both demonstrated live. Session 12 added D10 amendment (support confirmation), alias-based note resolution, and the conflict-demo fixture that satisfied the source-conflict milestone.
 **Goal:** Rework routing so the three evidence sources — vault, corpus, web — form a domain-general verification cascade that any claim can traverse, replacing the Phase 04 scope line that reserved the corpus route for never-web claims only. Add independent-lineage double-checks for high-importance findings and pure-code conflict detection between tiers.
 
 ---
@@ -34,7 +34,7 @@ Three sources, distinguished by **what they are authoritative for** and by **pro
 Two structural facts drive the whole design:
 
 1. **Cost, speed, and specificity all order the same way** (vault < corpus < web), so a cheapest-first cascade is also the fastest and most-specific-first design.
-2. **Vault and corpus share one lineage** (the vault is largely extracted *from* the corpus). Web is the only independent source. Checking vault against corpus can confirm a shared error — the 98-votes case proves this happened in practice.
+2. **Vault and corpus share one lineage** (the vault is largely extracted *from* the corpus). Web is the only independent source. Checking vault against corpus can confirm a shared error — the 98-votes case illustrates this risk. Session 12's D10 amendment (support confirmation) closes the gap: supported claims now get web confirmation when important.
 
 ## Design decisions (user-approved, Session 10)
 
@@ -60,7 +60,7 @@ A conflict flag fires **only** on a clear support-vs-refute disagreement between
 
 **D7 — Two distinct flags from the same function.**
 - Vault vs corpus disagree → **`vault-corpus-check-needed`**, listed under Vault Improvement Signals. It is a "re-read the source against your note" prompt, subject to human confirmation — not an automatic correction, because either side could be the stale one.
-- Web vs (vault or corpus) disagree → **`source-conflict`** on the claim itself: "your source says X, independent sources say Y." This is the highest-value output the system produces (it is exactly the 98-votes case).
+- Web vs (vault or corpus) disagree → **`source-conflict`** on the claim itself: "your source says X, independent sources say Y." This is the highest-value output the system produces. Originally illustrated by the 98-votes case; demonstrated live in Session 12 via the conflict-demo fixture (planted "140 votes" error caught by D10 web confirmation).
 
 **D8 — Single-lineage honesty.** When a claim's only verdicts come from one lineage (vault/corpus) and no independent check is possible (never-web classes) or was warranted (importance < 4), the report annotates the resolution as single-lineage rather than presenting it with the same confidence as an independently confirmed one.
 
@@ -92,7 +92,7 @@ User-approved this session. Test coverage: `TestD10SupportConfirmation` in `test
 ## Dependencies
 
 - Phase 04 offline implementation (corpus client, route handler, CLI wiring) — complete, 400 tests green.
-- Live corpus with the 3 ingested papers (`d_o3qBk5fESO_q` Nurullayev & Papa 2023, `d_7ZUo22uPGdsf` Kim 2023, `d_7lRaRsrtAJOW` de Carvalho 2025). **Zeng 2026 is not a blocker**: de Carvalho 2025 alone carries the 98-votes conflict case. Zeng's ingestion (pending the doc-rag-backend null-byte fix, cross-repo note 2026-07-25) enriches the corpus when it lands; the milestone does not wait for it.
+- Live corpus with the 3 ingested papers (`d_o3qBk5fESO_q` Nurullayev & Papa 2023, `d_7ZUo22uPGdsf` Kim 2023, `d_7lRaRsrtAJOW` de Carvalho 2025). **Zeng 2026 is not a blocker**: Zeng's ingestion (pending the doc-rag-backend null-byte fix, cross-repo note 2026-07-25) enriches the corpus when it lands; the milestone does not wait for it.
 - OpenAI account topped up (Session 10) — either provider works for the milestone.
 
 ## Task Groups
@@ -160,12 +160,10 @@ Task breakdown within each TG is the implementing session's job. Implementation 
 **Goal:** Live heavy run on the standard test file proves the cascade end-to-end; docs aligned; Phase 04 formally closed.
 
 **Success criteria:**
-- **MILESTONE (FULL, live):** heavy run on `workspace/inbox/ukraine-intro-test.txt` with vault + corpus (3 ingested docs) + web. Expected observable outcomes:
-  - At least one claim reaches the corpus tier via the cascade (the 5 web-routed claims from Session 10 now try corpus first; de Carvalho 2025 covers several).
-  - The 98-votes claim produces a **`source-conflict`**: corpus (de Carvalho, 98) vs web (93) — the flag, both provenances, and the suggested action visible in the report.
-  - No regression on vault-resolved claims; wall-clock and cost recorded and compared to the Session 10 baseline (~2 min, ~$0.16 search + LLM).
-  - User judges the report more useful than the Session 10 report — user judgment is the gate.
-- `docs-align-check` clean; CLAUDE.md pipeline section, `websearch-and-costs.md` (corpus cost profile), TASKS.md, HANDOVER.md current; pushed to origin.
+- **MILESTONE (FULL, live):** ~~heavy run on `workspace/inbox/ukraine-intro-test.txt` with vault + corpus (3 ingested docs) + web~~ **Superseded (Session 12):** the original 98-votes-on-real-corpus scenario was unreachable because (a) vault alignment against an author-year wikilink failed (note resolution was filename-only — fixed by `build_vault_index()` with alias support), and (b) the original D5 design prevented vault-supported claims from ever reaching web (the blind spot D10 closes). **Actual milestone (user-approved):** two complementary live runs:
+  - **Cited-file run** (`workspace/inbox/ukraine-intro-cited-test.md` + real vault + live corpus): 16 claims, 8 vault / 4 corpus (citation-scoped search demonstrated) / 4 web. Cascade corpus→web demonstrated. ~2 min.
+  - **Conflict-demo run** (`tests/fixtures/conflict-demo/` fixture vault, no corpus): 9 claims, planted "140 votes" error vault-supported → D10 web confirmation → web Refuted (real: 141) → `source-conflict` flag + REVISE-CLAIM in report. D10 gate demonstrated end-to-end.
+- `docs/websearch-and-costs.md` updated (corpus cost profile, D10 impact, Session 12 data); CLAUDE.md, TASKS.md, HANDOVER.md current; pushed to origin.
 - Phase 04 marked COMPLETE with a pointer to Phase 05; TG 04.4.2 recorded as superseded by this milestone.
 
 **Constraints:**
@@ -173,10 +171,10 @@ Task breakdown within each TG is the implementing session's job. Implementation 
 
 ## Phase success criteria
 
-- A claim of any triage class can be verified against vault, corpus, and web in cost order, stopping when a sufficient tier resolves it — with no per-domain configuration beyond the manifest's declared resources.
-- The 98-votes case surfaces as `source-conflict` with both provenances — demonstrated live.
-- Removal test: a manifest with no corpus and no vault degrades to Phase 01 web-only behavior unchanged.
-- Offline suite green (400+ tests); light profile untouched.
+- A claim of any triage class can be verified against vault, corpus, and web in cost order, stopping when a sufficient tier resolves it — with no per-domain configuration beyond the manifest's declared resources. **Met:** cascade demonstrated live (Session 11 + Session 12 cited-file run).
+- ~~The 98-votes case surfaces as `source-conflict` with both provenances — demonstrated live.~~ **Superseded (Session 12, user decision):** the original scenario was unreachable pre-D10 (vault-supported claims never reached web). D10 amendment opens the path; `source-conflict` demonstrated live via the conflict-demo fixture (planted "140 votes" error: vault support vs web refute). See Amendment (Session 12) section and TG 05.5.2b in TASKS.md for the full rationale.
+- Removal test: a manifest with no corpus and no vault degrades to Phase 01 web-only behavior unchanged. **Met:** tested offline (test_orchestration.py).
+- Offline suite green (400+ tests); light profile untouched. **Met:** 488 passed (488 non-slow), 3 deselected (slow).
 
 ## Risks and known failure modes
 
@@ -204,8 +202,8 @@ Task breakdown within each TG is the implementing session's job. Implementation 
 
 3. **Source-conflict requires a CITED claim that reaches both corpus and web.** The current test file (`ukraine-intro-test.txt`) has no wikilink citations, so D4 attribution checks never fire and no claim gets both corpus and web verdicts on the same claim. To demonstrate source-conflict live, create a test file with wikilink citations (e.g. `[[de Carvalho 2025]]`) whose citations map to corpus documents via `map_citations_to_document_ids()`. The 98-votes claim with a `[[de Carvalho 2025]]` citation would trigger D4 (vault-resolved + cited + importance >= 4 → scoped corpus check), producing corpus_supported (98) alongside vault_contradicted (93), which would fire `vault-corpus-check-needed`. Then D5 (refutation confirmation) would trigger web, producing web_refuted (93) → `source-conflict`.
 
-4. **Cascade stop-on-support is correct but masks corpus errors.** When vault misses a claim and corpus supports the wrong value (e.g. 98), the cascade stops (D1). Web never runs, so the error goes undetected. This is by design (D5: supports never trigger cross-checks — cost guardrail). The fix is vault-matching quality, not cascade policy.
+4. **Cascade stop-on-support is correct but masks corpus errors.** When vault misses a claim and corpus supports the wrong value (e.g. 98), the cascade stops (D1). Web never runs, so the error goes undetected. **Partially mitigated by D10 (Session 12 amendment):** claims with importance ≥ 4 now get one web confirmation even when vault/corpus supports them. The blind spot remains for importance < 4 claims, where the fix is vault-matching quality rather than cascade policy.
 
 ## Roadmap after this phase
 
-Phase 06 (Deep Research Commissions), Phase 07 (Draft Update Loop). The edge-case backlog carries forward; add: triage importance-distribution recalibration (Risk 1) if milestone data warrants it; source-conflict live demonstration with a cited test file.
+Phase 06 (Deep Research Commissions), Phase 07 (Draft Update Loop). The edge-case backlog carries forward; add: triage importance-distribution recalibration (Risk 1, sharpened by D10 — importance clusters ≥ 4 so support-confirmation fires broadly); zero-evidence web verdicts (VerificationResult enum gap); gap-report web-call counter undercounting D4/D5/D10 calls; vault-side aliases lint (SOURCE notes carrying "Author Year" aliases).

@@ -117,12 +117,12 @@ All present: `OPENAI_API_KEY` (sk-proj-, topped up Session 10), `EXA_API_KEY` (U
 | test_run_config.py | 24 | ResourceManifest, RunProfile, available_routes incl. corpus, vault-less degradation |
 | test_draft_parser.py | 25 | Wikilink parsing, stripping, author-year detection, sentence splitting, ParsedDraft |
 | test_citation_binder.py | 15 | Citation binding via original_index, union semantics, decomposition survival |
-| test_vault_serializer.py | 24 | Vault note parsing, filtering, serialization, token counting (22 narrow + 2 slow) |
-| test_alignment.py | 22 | gather_evidence (8), evaluate_alignment (12 + 2 fallback) |
+| test_vault_serializer.py | 35 | Vault note parsing, filtering, serialization, token counting, alias parsing, build_vault_index collision handling, conflict-demo fixture guard (33 narrow + 2 slow) |
+| test_alignment.py | 23 | gather_evidence (8 + 1 alias resolution), evaluate_alignment (12 + 2 fallback) |
 | test_vault_match.py | 42 | batch_match_claims, verify_matches, fallback, supersede, keywords, contradiction |
 | test_gap_report.py | 33 | assign_suggested_actions, render_gap_report, serialize_results, detect_conflicts, source-conflict rendering, single-lineage annotation |
 | test_triage.py | 13 | Batch triage, conservative fallback, importance clamping, prompt content |
-| test_routing.py | 72 | Policy rows, cascade (normalize_verdict, execute_routing multi-round), D4/D5 cross-checks, extensibility proof |
+| test_routing.py | 80 | Policy rows, cascade (normalize_verdict, execute_routing multi-round), D4/D5/D10 cross-checks, extensibility proof |
 | test_evidence_summarization.py | 11 | On/off switch, extract mapping, refuting content, fallback paths |
 | test_corpus_client.py | 22 | Search request/response, pagination, citation mapping, degradation |
 | test_corpus_route.py | 23 | Handler verdicts, provenance, factory wiring, citation-aware scoping, manifest gating |
