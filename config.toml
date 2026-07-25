@@ -20,6 +20,12 @@ vault_match_fallback = true     # citation-free vault matching: after the argume
                                  # full vault (evidence-type filtered only) for still-unmatched
                                  # claims, catching notes missing the argument_pyramid tag.
                                  # false = current single-pass (filtered-corpus-only) behavior
+support_confirmation = true     # D10 (Session 12 amendment): a claim whose vault or corpus
+                                 # verdict is a SUPPORT, with importance >= 4 and web-eligible,
+                                 # gets ONE web confirmation check (even though nothing refuted
+                                 # it) -- catches a false fact the author's own vault/draft share.
+                                 # false = restores pre-amendment behavior (supports never
+                                 # trigger routine cross-checks, D5's original guardrail)
 
 [models.openai]
 low = "openai:gpt-4o-mini"

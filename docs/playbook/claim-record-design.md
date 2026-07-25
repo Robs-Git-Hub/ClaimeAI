@@ -391,8 +391,9 @@ assignment. Two gates:
 |------|-----------|--------|
 | D4 (attribution) | vault-resolved + cited + importance ≥ 4 + corpus not yet routed | Scoped corpus check alongside vault verdict |
 | D5 (refutation confirmation) | single-tier refute + importance ≥ 4 + web-eligible + web not yet routed | One web check for independent confirmation |
+| D10 (support confirmation, Amendment Session 12) | support verdict (vault or corpus) + importance ≥ 4 + web-eligible + web not yet routed | One web check for independent confirmation |
 
-Supports never trigger cross-checks (cost guardrail).
+Supports never trigger cross-checks via D5 (cost guardrail) — but D10 (Session 12 amendment) now fires a web confirmation for importance ≥ 4 supports specifically, superseding that guardrail for important claims. Config-switchable via `pipeline.support_confirmation` in `config.toml` (default on).
 
 ### Conflict flags (D7)
 

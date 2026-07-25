@@ -20,7 +20,7 @@ from ingest.alignment import (
     evaluate_alignment,
     gather_evidence,
 )
-from ingest.vault_serializer import VaultNote
+from ingest.vault_serializer import VaultNote, build_vault_index
 from utils.claim_record import (
     CitationStatus,
     ClaimRecord,
@@ -35,13 +35,14 @@ from utils.claim_record import (
 # ---------------------------------------------------------------------------
 
 
-def make_vault_note(name, note_type, body_sections=None, wikilinks=None):
+def make_vault_note(name, note_type, body_sections=None, wikilinks=None, aliases=None):
     return VaultNote(
         name=name,
         note_type=note_type,
         frontmatter={"type": note_type},
         body_sections=body_sections or {},
         wikilinks=wikilinks or [],
+        aliases=aliases or [],
         file_path=f"v-research/{name}.md",
     )
 
@@ -212,6 +213,25 @@ def test_gather_multiple_linked_notes():
     assert len(result.linked_notes) == 3
     names = {ln.name for ln in result.linked_notes}
     assert names == {"LINK-1", "LINK-2", "LINK-3"}
+
+
+def test_gather_evidence_resolves_via_alias_index():
+    """End-to-end: build_vault_index() lets an author-year wikilink resolve
+    to a note whose filename doesn't match, via its aliases frontmatter.
+    """
+    note = make_vault_note(
+        "SOURCE-de-carvalho-2025-x",
+        "academic-paper",
+        body_sections={"": "Shifting alliances content."},
+        aliases=["de Carvalho 2025"],
+    )
+    index = build_vault_index([note])
+
+    result = gather_evidence("de Carvalho 2025", index)
+
+    assert result.cited_note_name is not None
+    assert result.cited_note_name == "SOURCE-de-carvalho-2025-x"
+    assert result.cited_note_content == "Shifting alliances content."
 
 
 # ---------------------------------------------------------------------------

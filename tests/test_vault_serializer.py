@@ -30,6 +30,7 @@ from ingest.vault_serializer import (
     DEFAULT_EVIDENCE_TYPES,
     SerializedVault,
     VaultNote,
+    build_vault_index,
     load_vault,
     parse_vault_note,
     serialize_vault,
@@ -39,6 +40,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "vault"
 LIVE_VAULT = Path(
     "C:/Users/rj_co/OneDrive/Documents/GitHub/Robert-Repos/ukraine-vote-analysis/vault-main"
 )
+CONFLICT_DEMO_VAULT = Path(__file__).parent / "fixtures" / "conflict-demo" / "vault-main"
 
 
 def fixture_path(name: str) -> Path:
@@ -128,6 +130,51 @@ class TestParseVaultNote:
 
         assert "SOURCE-fixture-academic-paper.md" in note.file_path
         assert not Path(note.file_path).is_absolute()
+
+    # -- aliases (Amendment, Session 12: alias-based cited-note resolution) --
+
+    def test_parse_vault_note_aliases_list(self):
+        note = parse_vault_note(fixture_path("SOURCE-fixture-academic-paper.md"))
+
+        assert note.aliases == ["Example 2026", "Fixture Author 2026"]
+
+    def test_parse_vault_note_aliases_missing_field_defaults_empty(self):
+        note = parse_vault_note(fixture_path("QUOTE-fixture-verbatim-example.md"))
+
+        assert note.aliases == []
+
+    def test_parse_vault_note_aliases_single_string_normalized_to_list(self, tmp_path):
+        note_path = tmp_path / "SOURCE-alias-string.md"
+        note_path.write_text(
+            "---\ntype: web-page\naliases: Solo Alias 2026\n---\n\nBody text.\n",
+            encoding="utf-8",
+        )
+
+        note = parse_vault_note(note_path)
+
+        assert note.aliases == ["Solo Alias 2026"]
+
+    def test_parse_vault_note_aliases_malformed_non_string_entries_degrade_empty(self, tmp_path):
+        note_path = tmp_path / "SOURCE-alias-bad-list.md"
+        note_path.write_text(
+            "---\ntype: web-page\naliases: [\"Good Alias\", 42]\n---\n\nBody text.\n",
+            encoding="utf-8",
+        )
+
+        note = parse_vault_note(note_path)
+
+        assert note.aliases == []
+
+    def test_parse_vault_note_aliases_wrong_type_degrades_empty(self, tmp_path):
+        note_path = tmp_path / "SOURCE-alias-wrong-type.md"
+        note_path.write_text(
+            "---\ntype: web-page\naliases: 42\n---\n\nBody text.\n",
+            encoding="utf-8",
+        )
+
+        note = parse_vault_note(note_path)
+
+        assert note.aliases == []
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +279,108 @@ class TestSerializeVault:
         assert result.note_count == 0
         assert result.notes == []
         assert result.warnings == []
+
+
+# ---------------------------------------------------------------------------
+# build_vault_index (Amendment, Session 12: alias-based cited-note resolution)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildVaultIndex:
+    def test_filename_keys_present(self):
+        note = VaultNote(
+            name="SOURCE-a", note_type="web-page", file_path="v-research/SOURCE-a.md"
+        )
+
+        index = build_vault_index([note])
+
+        assert index["SOURCE-a"] is note
+
+    def test_alias_keys_present(self):
+        note = VaultNote(
+            name="SOURCE-de-carvalho-2025-x",
+            note_type="academic-paper",
+            aliases=["de Carvalho 2025"],
+            file_path="v-research/SOURCE-de-carvalho-2025-x.md",
+        )
+
+        index = build_vault_index([note])
+
+        assert index["de Carvalho 2025"] is note
+        assert index["SOURCE-de-carvalho-2025-x"] is note
+
+    def test_alias_colliding_with_filename_is_dropped(self):
+        aliased_note = VaultNote(
+            name="SOURCE-a",
+            note_type="web-page",
+            aliases=["SOURCE-b"],
+            file_path="v-research/SOURCE-a.md",
+        )
+        filename_note = VaultNote(
+            name="SOURCE-b", note_type="web-page", file_path="v-research/SOURCE-b.md"
+        )
+
+        index = build_vault_index([aliased_note, filename_note])
+
+        # Filename always wins: "SOURCE-b" still resolves to the note named
+        # SOURCE-b, never to aliased_note.
+        assert index["SOURCE-b"] is filename_note
+
+    def test_two_notes_sharing_an_alias_are_both_dropped(self):
+        note_a = VaultNote(
+            name="SOURCE-a",
+            note_type="web-page",
+            aliases=["Shared Alias 2026"],
+            file_path="v-research/SOURCE-a.md",
+        )
+        note_b = VaultNote(
+            name="SOURCE-b",
+            note_type="web-page",
+            aliases=["Shared Alias 2026"],
+            file_path="v-research/SOURCE-b.md",
+        )
+
+        index = build_vault_index([note_a, note_b])
+
+        assert "Shared Alias 2026" not in index
+        # Filenames are unaffected by the collision.
+        assert index["SOURCE-a"] is note_a
+        assert index["SOURCE-b"] is note_b
+
+    def test_no_io_pure_function(self):
+        # Exercises build_vault_index over in-memory notes only -- no vault
+        # path or file access involved, confirming it's a pure function.
+        note = VaultNote(
+            name="SOURCE-pure", note_type="web-page", file_path="v-research/SOURCE-pure.md"
+        )
+
+        index = build_vault_index([note])
+
+        assert len(index) == 1
+
+
+# ---------------------------------------------------------------------------
+# conflict-demo fixture (Amendment, Session 12): source-conflict test vault
+# ---------------------------------------------------------------------------
+#
+# Guards the known silent-zero-notes pitfall (load_vault appends v-research
+# internally; argument_pyramid must match current frontmatter -- either
+# mismatch silently yields zero notes) for the fixture vault used to
+# exercise the D6/D7 source-conflict path end-to-end: a SOURCE note plants
+# a deliberately wrong vote tally that a citation-free draft repeats.
+
+
+class TestConflictDemoFixture:
+    def test_conflict_demo_vault_loads_source_note_via_argument_pyramid_filter(self):
+        notes = load_vault(CONFLICT_DEMO_VAULT, argument_pyramid="conflict-demo")
+
+        names = {n.name for n in notes}
+        assert names == {
+            "SOURCE-unga-es-11-1-vote-tally",
+            "QUOTE-unga-es-11-1-near-unanimous",
+            "CLAIM-unga-es-11-1-broad-condemnation",
+        }
+        assert "SOURCE-unga-es-11-1-vote-tally" in names
 
 
 # ---------------------------------------------------------------------------

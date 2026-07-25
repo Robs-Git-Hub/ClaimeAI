@@ -66,6 +66,14 @@ A conflict flag fires **only** on a clear support-vs-refute disagreement between
 
 **D9 — Triage's role shifts; its prompt does not change.** Triage classes stop selecting *the* route (the cascade handles that) and instead determine (a) trivial skip, (b) web eligibility (never-web classes), (c) via importance, whether D4/D5 cross-checks apply. No re-prompting of the triage classifier is in scope.
 
+## Amendment (Session 12)
+
+**D10 — Support confirmation for important claims.** A claim whose vault or corpus verdict is a SUPPORT (per `normalize_verdict()` == support), with importance ≥ 4, web-eligible (triage class not in `NEVER_WEB_CLASSES`), and not already routed to web, gets **one** web confirmation check. Mixed support+refute still fires — no "no refute present" condition is added; web arbitrates. Implemented as `_needs_support_confirm()` in `ingest/routing.py`, dispatched alongside D4/D5 inside `apply_cross_checks()`. Config-switchable via `pipeline.support_confirmation` in `config.toml` (default on), following the exact pattern of `vault_match_fallback`.
+
+This **supersedes D5's sentence "Supports do not trigger routine cross-checks"** for importance ≥ 4 claims. Rationale: a false fact shared by the author's vault and draft (the planted 140-vs-141 vote tally in `tests/fixtures/conflict-demo/`) previously sailed through with no independent check — vault-resolved claims stop routing entirely (D1's `vault-resolved` policy row), and D5's original guardrail meant a pure support verdict never triggered a cross-check either. Per the user's verification-conservatism principle ("better to send too much to web than too little; missed errors are the worst case"), the threshold used for D4/D5 (`CROSS_CHECK_IMPORTANCE_THRESHOLD = 4`) also gates D10 — user-approved this session at that same threshold rather than a separate, stricter one.
+
+User-approved this session. Test coverage: `TestD10SupportConfirmation` in `tests/test_routing.py` (8 tests), plus two pre-existing D4/D5 tests (`test_d4_vault_resolved_cited_important_gets_corpus`, `test_d5_support_never_triggers_d5_itself`) updated to reflect that a web check now also fires for those records via D10. A committed fixture at `tests/fixtures/conflict-demo/` (3 vault notes + a citation-free draft repeating the planted false vote tally) exercises the source-conflict path end-to-end.
+
 ## What this supersedes
 
 - **Decision 44** (Session 9): "Corpus route only for never-web claims this phase." Replaced by D2.

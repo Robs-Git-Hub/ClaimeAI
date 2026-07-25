@@ -34,9 +34,16 @@ from typing import Awaitable, Callable, Dict, List, Optional, Protocol
 from pydantic import BaseModel, Field
 
 from utils.claim_record import CitationStatus, ClaimRecord, RouteVerdict, VaultVerdict
+from utils.config import config as _config
 from utils.run_config import ResourceManifest
 
 logger = logging.getLogger(__name__)
+
+_PIPELINE_CONFIG = _config.get("pipeline", {})
+
+# Off = D10 (support confirmation) never fires, restoring pre-amendment
+# behavior where supports never trigger routine cross-checks.
+SUPPORT_CONFIRMATION_ENABLED: bool = _PIPELINE_CONFIG.get("support_confirmation", True)
 
 # Bounds how many route handlers (each a network-bound call -- the web
 # handler alone makes ~5 API calls per claim) run concurrently. A module-level
@@ -588,6 +595,37 @@ def _needs_d4(record: ClaimRecord) -> bool:
     return True
 
 
+# Routes whose verdicts count toward D10's "already has a support verdict"
+# check -- the vault and corpus routes (never web: a claim already routed
+# to web is excluded by `_already_routed(record, "web")` below, not by this
+# set).
+_D10_SUPPORT_SOURCE_ROUTES = frozenset({"vault_aligned", "vault_matched", "corpus"})
+
+
+def _needs_support_confirm(record: ClaimRecord) -> bool:
+    """D10 (Session 12 amendment): support verdict, importance >= threshold,
+    web-eligible, web not yet attempted -> one web confirmation check.
+
+    Supersedes D5's "supports never trigger routine cross-checks" guardrail
+    for importance >= threshold claims: a false fact shared by the author's
+    vault and draft previously sailed through with no independent check.
+    Mixed support+refute still fires -- web arbitrates -- so this does NOT
+    check for the absence of a refuting verdict.
+    """
+    if not SUPPORT_CONFIRMATION_ENABLED:
+        return False
+    if (record.importance or 0) < CROSS_CHECK_IMPORTANCE_THRESHOLD:
+        return False
+    if record.triage_class in NEVER_WEB_CLASSES:
+        return False
+    if _already_routed(record, "web"):
+        return False
+    return any(
+        rv.route in _D10_SUPPORT_SOURCE_ROUTES and normalize_verdict(rv.verdict) == NORM_SUPPORT
+        for rv in record.route_verdicts
+    )
+
+
 def _needs_d5(record: ClaimRecord) -> bool:
     """D5: single-lineage refutation, importance >= threshold, web-eligible, web not yet attempted."""
     if (record.importance or 0) < CROSS_CHECK_IMPORTANCE_THRESHOLD:
@@ -624,11 +662,18 @@ async def apply_cross_checks(
     + web-eligible → one web check for independent confirmation.
     Never-web claims are left as single-lineage.
 
-    Supports NEVER trigger cross-checks (cost guardrail).
+    D10 (Session 12 amendment) — Support confirmation: a support verdict
+    (vault or corpus) + importance >= 4 + web-eligible + web not yet
+    attempted → one web confirmation check. Supersedes D5's original
+    "supports never trigger cross-checks" guardrail for important claims;
+    gated by config.toml's ``pipeline.support_confirmation``
+    (``SUPPORT_CONFIRMATION_ENABLED``, default on).
+
     Modifies and returns ``records`` in place.
     """
     d4_dispatch: List[tuple] = []
     d5_dispatch: List[tuple] = []
+    d10_dispatch: List[tuple] = []
 
     corpus_handler = handlers.get("corpus")
     web_handler = handlers.get("web")
@@ -638,8 +683,10 @@ async def apply_cross_checks(
             d4_dispatch.append((record, corpus_handler, "corpus"))
         if web_handler and _needs_d5(record):
             d5_dispatch.append((record, web_handler, "web"))
+        if web_handler and _needs_support_confirm(record):
+            d10_dispatch.append((record, web_handler, "web"))
 
-    all_dispatch = d4_dispatch + d5_dispatch
+    all_dispatch = d4_dispatch + d5_dispatch + d10_dispatch
     if not all_dispatch:
         return records
 

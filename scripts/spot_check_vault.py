@@ -24,6 +24,7 @@ from ingest.gap_report import assign_suggested_actions, render_gap_report
 from ingest.vault_match import batch_match_claims, verify_matches
 from ingest.vault_serializer import (
     DEFAULT_EVIDENCE_TYPES,
+    build_vault_index,
     load_vault,
     serialize_vault,
 )
@@ -70,12 +71,12 @@ async def main():
         argument_pyramid=ARGUMENT_PYRAMID,
         evidence_types=DEFAULT_EVIDENCE_TYPES,
     )
-    filtered_vault = {n.name: n for n in filtered_notes}
+    filtered_vault = build_vault_index(filtered_notes)
     print(f"  Filtered: {len(filtered_notes)} notes (argument_pyramid={ARGUMENT_PYRAMID})")
 
     # Load full vault (no filters) as fallback for cited-note lookup
     all_notes = load_vault(VAULT_PATH)
-    full_vault = {n.name: n for n in all_notes}
+    full_vault = build_vault_index(all_notes)
     print(f"  Full: {len(all_notes)} notes (unfiltered)")
 
     # Parse test file

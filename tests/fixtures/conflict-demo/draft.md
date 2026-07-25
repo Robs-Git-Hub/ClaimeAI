@@ -1,0 +1,1 @@
+The United Nations General Assembly adopted Resolution ES-11/1 in March 2022. The resolution was adopted with 140 votes in favour, 5 against, and 35 abstentions. This near-unanimous result demonstrated broad international condemnation of the invasion.

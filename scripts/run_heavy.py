@@ -84,7 +84,12 @@ from ingest.vault_match import (
     supersede_stale_no_match,
     verify_matches,
 )
-from ingest.vault_serializer import DEFAULT_EVIDENCE_TYPES, load_vault, serialize_vault
+from ingest.vault_serializer import (
+    DEFAULT_EVIDENCE_TYPES,
+    build_vault_index,
+    load_vault,
+    serialize_vault,
+)
 from ingest.alignment import evaluate_alignment
 from utils.claim_record import CitationStatus, ClaimRecord
 from utils.run_config import ResourceManifest, RunProfile
@@ -182,8 +187,8 @@ async def run_pipeline(
                 argument_pyramid=manifest.argument_pyramid,
                 evidence_types=DEFAULT_EVIDENCE_TYPES,
             )
-            filtered_vault = {n.name: n for n in filtered_notes}
-            full_vault = {n.name: n for n in load_vault(manifest.vault_path)}
+            filtered_vault = build_vault_index(filtered_notes)
+            full_vault = build_vault_index(load_vault(manifest.vault_path))
             serialized = serialize_vault(filtered_notes)
         except Exception as exc:  # noqa: BLE001
             record_failure("load_vault", exc)
@@ -233,9 +238,7 @@ async def run_pipeline(
                             records, full_type_notes, already_matched
                         )
                         if fallback_proposals:
-                            full_type_vault_by_name = {
-                                note.name: note for note in full_type_notes
-                            }
+                            full_type_vault_by_name = build_vault_index(full_type_notes)
                             await verify_matches(
                                 records,
                                 fallback_proposals,

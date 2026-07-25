@@ -294,7 +294,7 @@ Plan: `phase-plans/phase-04-corpus-rag-route.md`. Backend repo cloned at `../doc
 
 ---
 
-## Phase 05: Three-Tier Evidence Cascade — IN PROGRESS (Session 11)
+## Phase 05: Three-Tier Evidence Cascade — COMPLETE (Session 12)
 
 Plan: `phase-plans/phase-05-three-tier-evidence-cascade.md`. Reworks routing so vault, corpus, and web form a domain-general verification cascade. Adds citation-aware corpus scoping, importance-gated cross-checks (D4/D5), pure-code conflict detection with `source-conflict` and `vault-corpus-check-needed` flags. Supersedes Decision 44 ("corpus only for never-web").
 
@@ -332,6 +332,9 @@ Cross-checks are post-routing steps: direct handler invocations that bypass the 
 - [x] 05.3.2b Implement D5 in `apply_cross_checks()` via `_needs_d5()` gate → NARROW
 - [x] 05.3.3b Wire `apply_cross_checks()` in run_heavy.py between execute_routing and assign_suggested_actions → NARROW
 - [x] 05.3.4 TG 05.3 complete — regression check → MID (96 tests across routing + orchestration)
+- [x] 05.3.5 (Amendment, Session 12) D10 support-confirmation: tests + implementation + config switch
+- [x] 05.3.6 (Amendment, Session 12) conflict-demo fixture at tests/fixtures/conflict-demo/
+- [x] 05.3.7 (Amendment, Session 12) Alias-based cited-note resolution: `aliases` frontmatter parsed, `build_vault_index()` (filename wins, ambiguous aliases dropped), wired into run_heavy + spot_check. Vault-side lint (every SOURCE note carries an "Author Year" alias) is the sibling-repo's job.
 
 ### TG 05.4: Conflict Detection, Flags, and Report — COMPLETE
 
@@ -344,14 +347,16 @@ All runtime code in this TG is pure (zero LLM calls). Uses normalization from TG
 - [x] 05.4.5 Update `docs/playbook/claim-record-design.md` — normalization table, both flags, single-lineage, superseded scope line, lineage groups, cross-check gates, assign_suggested_actions priority update
 - [x] 05.4.6 TG 05.4 complete — MID regression: 468 passed, 3 deselected
 
-### TG 05.5: Milestone and Wrap — IN PROGRESS
+### TG 05.5: Milestone and Wrap — COMPLETE (Session 12)
 
-- [x] 05.5.1 Full test suite green → FULL: 471 passed, 0 failed
+- [x] 05.5.1 Full test suite green → FULL: 471 passed, 0 failed (Session 11); 488 passed after Session 12 amendments (D10 + alias resolution + fixtures)
 - [x] 05.5.2a MILESTONE (live, 3 runs): cascade demonstrated — Run 3 (correct vault config): 17 claims, 11 vault-resolved, 5 corpus, 1 web. ~2 min wall-clock. Cascade corpus→web demonstrated on 1 claim. Single-lineage annotations on corpus-only claims.
-- [ ] 05.5.2b MILESTONE: source-conflict flag NOT demonstrated live. Reason: test file has no wikilink citations → D4 attribution check never fires → no claim gets both corpus and web verdicts. Need a cited test file where citations map to corpus documents. The mechanism is fully tested offline (8 detect_conflicts tests + 1 priority test + 4 rendering tests).
+- [x] 05.5.2b MILESTONE (Session 12): source-conflict flag demonstrated live via D10 amendment + conflict-demo fixture (`tests/fixtures/conflict-demo/`: tiny committed vault with planted "140 votes" error, draft repeating it). Run: vault_supported → D10 web confirmation → web Refuted (real tally: 141) → `source-conflict` flag + REVISE-CLAIM rendered in gap report. Also: cited-file run (ukraine-intro-cited-test.md) demonstrated citation-aware corpus scoping live (16 claims, 8 vault / 4 corpus / 4 web, ~2 min). The original D4-only path to source-conflict was superseded by D10 (user decision, Session 12).
 - [x] 05.5.3a CLAUDE.md pipeline section updated with cascade. claim-record-design.md updated with Phase 05 section.
-- [ ] 05.5.3b `docs/websearch-and-costs.md` NOT updated with corpus cost profile (deferred to incoming session)
-- [x] 05.5.4 HANDOVER.md updated; pushed to origin
+- [x] 05.5.3b `docs/websearch-and-costs.md` updated (Session 12): corpus cost profile (~$0.01–0.02/claim, no search charge), Session 12 live run data, D10 cost impact (~2x web calls), Exa credit-cap correction ($20 sign-up + $10/month, hard cap — 402 observed live), zero-evidence verdict caveat.
+- [x] 05.5.4 HANDOVER.md updated; pushed to origin (Sessions 11 and 12)
+
+Session 12 findings for the backlog (recorded below): web evaluator returns "Refuted" on zero evidence; gap-report web-call counter misses D4/D5/D10 cross-check calls; Exa credits exhausted mid-session (config flipped to tavily for the demo run, reverted to exa at close).
 
 ---
 
@@ -360,4 +365,4 @@ All runtime code in this TG is pure (zero LLM calls). Uses normalization from TG
 - **Phase 06 — Deep Research Commissions:** human-approved escalation, commission writer, response-paper ingestion + re-evaluation
 - **Phase 07 — Draft Update Loop:** propose citation-inserting draft edits after vault improvement
 
-**Edge-case backlog:** PDF-only drafts / plain-text citation parsing; source fetching for absent papers; vault-less heavy runs; vault QA / chain completeness (verify vault notes against original sources — separate domain from draft-claim verification, likely reuses doc-rag-backend); semi-automated vault enrichment; triage importance-distribution recalibration (Phase 05 Risk 1)
+**Edge-case backlog:** PDF-only drafts / plain-text citation parsing; source fetching for absent papers; vault-less heavy runs; vault QA / chain completeness (verify vault notes against original sources — separate domain from draft-claim verification, likely reuses doc-rag-backend); semi-automated vault enrichment; triage importance-distribution recalibration (Phase 05 Risk 1, sharpened by D10: importance clusters ≥ 4 so support-confirmation fires broadly); zero-evidence web verdicts return "Refuted" instead of insufficient (VerificationResult enum gap — dead search provider silently produces refutations, observed Session 12 during Exa outage); gap-report "web calls made" counter misses D4/D5/D10 cross-check invocations (undercounts); vault-side aliases lint (every SOURCE note carries an "Author Year" alias so hand-written wikilinks resolve — ClaimeAI side landed Session 12 as `build_vault_index()`)

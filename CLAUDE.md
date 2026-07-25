@@ -44,7 +44,7 @@ This fork strips the original to the agent backend only (no web frontend, no Chr
 - `ingest/draft_types.py` — shared types for draft parsing (WikilinkCitation, ParsedSentence, ParsedDraft)
 - `ingest/draft_parser.py` — wikilink parsing, author-year detection, sentence splitting, `parse_draft()`
 - `ingest/citation_binder.py` — maps pipeline Verdicts to ClaimRecords via `original_index`
-- `ingest/vault_serializer.py` — parses Obsidian vault notes, filters by argument_pyramid/type, serializes to JSON with token counting
+- `ingest/vault_serializer.py` — parses Obsidian vault notes, filters by argument_pyramid/type, serializes to JSON with token counting; `build_vault_index()` builds a name+alias lookup dict (filename always wins, colliding aliases dropped)
 - `utils/claim_record.py` — ClaimRecord (Phase 02–05 data contract), CitationStatus, VaultVerdict, CorpusVerdict, SuggestedAction, DraftPosition, RouteVerdict
 - `utils/run_config.py` — ResourceManifest (declares evidence sources per run), RunProfile (light/heavy)
 - `ingest/alignment.py` — cited-claim alignment: `gather_evidence()` (one-hop vault traversal) + `evaluate_alignment()` (high-tier LLM evaluation)
@@ -96,9 +96,10 @@ Draft (markdown with wikilinks) → parse_draft() → bind_citations() → [Clai
       general-factual / academic-citable / unclassified → corpus first, web if corpus silent
   → corpus route: search_corpus (citation-scoped when cited) → summarize (mid) → evaluate (high, route-local)
   → web route: search → summarize_evidence (mid tier) → evaluate_evidence (high tier)
-  → apply_cross_checks (D4/D5, importance-gated):
+  → apply_cross_checks (D4/D5/D10, importance-gated):
       D4: vault-resolved + cited + importance ≥ 4 → scoped corpus attribution check
       D5: single-tier refute + importance ≥ 4 + web-eligible → web confirmation
+      D10 (Amendment, Session 12): support verdict + importance ≥ 4 + web-eligible → web confirmation
   → detect_conflicts (pure code, D6/D7):
       source-conflict: shared-lineage vs web disagree (support vs refute)
       vault-corpus-check-needed: vault vs corpus disagree

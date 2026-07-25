@@ -80,6 +80,10 @@ class VaultNote(BaseModel):
     frontmatter: Dict[str, Any] = Field(default_factory=dict, description="All frontmatter fields as-is")
     body_sections: Dict[str, str] = Field(default_factory=dict, description="Heading -> section text")
     wikilinks: List[str] = Field(default_factory=list, description="Outgoing [[target]] names from body")
+    aliases: List[str] = Field(
+        default_factory=list,
+        description="Frontmatter `aliases` field, normalized to a list of strings (empty if absent/malformed)",
+    )
     file_path: str = Field(description="Path relative to the vault root")
 
 
@@ -140,6 +144,24 @@ def _extract_wikilinks(body: str) -> List[str]:
     return [m.group(1).strip() for m in _WIKILINK_RE.finditer(body)]
 
 
+def _parse_aliases(raw_aliases: Any) -> List[str]:
+    """Normalize the frontmatter ``aliases`` field to a list of strings.
+
+    Accepts a YAML list of strings or a single bare string. Anything else
+    (missing field, non-list/non-string type, or a list containing a
+    non-string entry) degrades gracefully to an empty list rather than
+    raising -- matching this module's existing graceful-degradation style
+    for malformed frontmatter.
+    """
+    if isinstance(raw_aliases, str):
+        return [raw_aliases]
+    if isinstance(raw_aliases, list):
+        if all(isinstance(item, str) for item in raw_aliases):
+            return raw_aliases
+        return []
+    return []
+
+
 def parse_vault_note(path: Path) -> VaultNote:
     """Parse a single .md vault note into a VaultNote.
 
@@ -164,6 +186,7 @@ def parse_vault_note(path: Path) -> VaultNote:
 
     body_sections = _split_body_sections(body)
     wikilinks = _extract_wikilinks(body)
+    aliases = _parse_aliases(frontmatter.get("aliases"))
 
     return VaultNote(
         name=path.stem,
@@ -171,6 +194,7 @@ def parse_vault_note(path: Path) -> VaultNote:
         frontmatter=frontmatter,
         body_sections=body_sections,
         wikilinks=wikilinks,
+        aliases=aliases,
         file_path=path.name,
     )
 
@@ -211,6 +235,42 @@ def load_vault(
         notes = [note for note in notes if note.note_type in evidence_types]
 
     return notes
+
+
+def build_vault_index(notes: List[VaultNote]) -> Dict[str, VaultNote]:
+    """Build a name-and-alias index over vault notes for cited-note lookup.
+
+    Every note's filename stem (``VaultNote.name``) maps to that note.
+    Every note's ``aliases`` (Obsidian-standard frontmatter field) also maps
+    to that note -- UNLESS the alias collides with ANY filename stem, or
+    with another note's alias, in which case the colliding alias is dropped
+    entirely (both claimants lose it): filenames always win. Note names are
+    variable across the vault, but Obsidian-authored wikilinks carry real
+    filenames, so filename resolution must never be overridden by an alias.
+
+    A wrong binding is worse than no binding -- the same conservative
+    principle applied by ``map_citations_to_document_ids()`` in
+    ``ingest/corpus_client.py`` (ambiguous citations are dropped rather than
+    guessed).
+
+    Pure function: no file I/O, no LLM calls.
+    """
+    index: Dict[str, VaultNote] = {note.name: note for note in notes}
+    filenames = set(index)
+
+    alias_claimants: Dict[str, List[VaultNote]] = {}
+    for note in notes:
+        for alias in note.aliases:
+            alias_claimants.setdefault(alias, []).append(note)
+
+    for alias, claimants in alias_claimants.items():
+        if alias in filenames:
+            continue  # filename always wins; alias dropped
+        if len(claimants) == 1:
+            index[alias] = claimants[0]
+        # else: alias claimed by more than one note -- ambiguous, drop it
+
+    return index
 
 
 def serialize_vault(

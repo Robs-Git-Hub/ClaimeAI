@@ -1,35 +1,37 @@
 # Session Handover
 
-**Last Updated:** 2026-07-25 (Session 11, outgoing)
-**Current Status:** Phase 05 TGs 05.1–05.4 COMPLETE (implementation + tests). TG 05.5 milestone PARTIAL — cascade demonstrated live, source-conflict flag not demonstrated (needs cited test file).
+**Last Updated:** 2026-07-25 (Session 12, outgoing)
+**Current Status:** Phase 05 COMPLETE (closed Session 12). All milestone criteria met including live source-conflict demonstration. 488 tests. Next: Phase 06 planning or backlog items.
 
 ---
 
 ## Start Here
 
-**Outgoing session completed:** Phase 05 implementation (68 new tests, 471 total). Three-tier evidence cascade (vault→corpus→web) fully operational: `normalize_verdict()`, cascade in `execute_routing()`, citation-aware corpus scoping, D4/D5 importance-gated cross-checks, pure-code conflict detection with `source-conflict` and `vault-corpus-check-needed` flags, single-lineage annotations in gap report. Live milestone run: 17 claims, 11 vault-resolved, 5 corpus, 1 web, ~2 min. Source-conflict flag tested offline (13 tests) but not demonstrated live — requires a cited test file whose wikilinks map to corpus documents.
+**Outgoing session completed:** Phase 05 CLOSED. Two design amendments (user-approved) plus the live source-conflict demonstration:
+
+1. **D10 — support confirmation** (supersedes part of D5): vault/corpus-supported claims with importance ≥ 4 now get ONE independent web confirmation check. Rationale: a false fact shared by vault and draft previously passed with no independent check; user's verification-conservatism principle (missed errors are worst case) outweighed the Session 10 cost guardrail. User chose the ≥ 4 gate over the recommended ≥ 5, accepting ~2x web calls. Config switch: `support_confirmation` in config.toml (default true). Implemented in `_needs_support_confirm()` (`ingest/routing.py`), wired into `apply_cross_checks()`.
+2. **Alias-based cited-note resolution**: `gather_evidence()` resolved wikilinks by filename stem only — `[[de Carvalho 2025]]` silently failed against `SOURCE-de-carvalho-2025-shifting-alliances.md`. Now `build_vault_index()` (`ingest/vault_serializer.py`) indexes notes by filename AND frontmatter `aliases` (filename wins; ambiguous aliases dropped — same conservatism as `map_citations_to_document_ids`). **Vault-side lint still needed** (sibling repo): every SOURCE note should carry an "Author Year" alias. Obsidian-authored links carry real filenames, so this is defense-in-depth for hand-written links.
+3. **Source-conflict demonstrated live** (TG 05.5.2b): fixture at `tests/fixtures/conflict-demo/` — tiny committed vault with planted false tally ("140 votes in favour"; truth 141) + draft repeating the error. Run: vault_supported → D10 web confirmation → web Refuted (141) → `source-conflict` + REVISE-CLAIM in report. Command: `poetry run python scripts/run_heavy.py tests/fixtures/conflict-demo/draft.md --vault tests/fixtures/conflict-demo/vault-main --argument-pyramid conflict-demo`
+4. **Cited-file milestone run**: `workspace/inbox/ukraine-intro-cited-test.md` (wikilinked variant of the standard test file) demonstrated citation-aware corpus scoping live: 16 claims, 8 vault / 4 corpus / 4 web, corpus→web cascade, ~2 min.
+5. **Cost doc updated** (`docs/websearch-and-costs.md`): corpus profile (~$0.01–0.02/claim), D10 impact, Session 12 run data, Exa credit-cap correction, zero-evidence caveat.
 
 **Incoming session should:**
 
-1. **Create a cited test file** for source-conflict demonstration. Add wikilink citations to `ukraine-intro-test.txt` (or create a new file) — e.g., the "98 votes" sentence needs `[[de Carvalho 2025]]` so D4 fires. The citation must map to corpus document `d_7lRaRsrtAJOW` via `map_citations_to_document_ids()`. Then re-run the milestone and verify `source-conflict` appears in the report.
+1. **Decide next phase**: Phase 06 (Deep Research Commissions) planning, or backlog items first (see below).
+2. **Exa is OUT OF CREDITS** (402 NO_MORE_CREDITS observed mid-session). Free tier = $20 sign-up + $10/month refresh (hard cap; rate limits are separate). config.toml committed default is `exa` (user decision) — flip to `tavily` locally for dev runs until Exa refreshes/topped up. Tavily verified working this session (1,000 free credits/month).
+3. **High-value backlog items surfaced this session:**
+   - Zero-evidence web verdicts return "Refuted" instead of insufficient (VerificationResult enum gap). A dead search provider silently produces refutations. Check search-error logs before trusting Refuted verdicts.
+   - Gap report "Web calls made this run" counts routing decisions only — misses D4/D5/D10 cross-check calls (the conflict-demo report said "0 web calls" while making 9).
+   - Vault aliases lint in sibling repo (see amendment 2 above).
+   - Triage importance recalibration: importance clusters ≥ 4, so D10 fires on nearly all vault-resolved claims (9/9 in the demo run) — the gate barely gates. Recalibrating triage's importance guidance would restore cost control.
+4. **Zeng 2026 ingestion** — check if doc-rag-backend has fixed the null-byte bug. If fixed, re-ingest and add document_id to corpus-ids.
 
-2. **Critical config notes for milestone run:**
-   - `--vault` path must be the vault ROOT (`vault-main`), NOT `vault-main/v-research` — `load_vault()` appends `v-research` internally. Wrong path silently produces zero vault notes.
-   - `--argument-pyramid` value must be `un-ukraine-russia-war-votes-working-paper` (changed from `ukraine-vote` in the sibling vault repo).
-   - Working command: `poetry run python scripts/run_heavy.py workspace/inbox/ukraine-intro-test.txt --vault "PATH/vault-main" --argument-pyramid un-ukraine-russia-war-votes-working-paper --corpus-ids d_o3qBk5fESO_q,d_7ZUo22uPGdsf,d_7lRaRsrtAJOW`
+**Critical config notes for heavy runs (unchanged):**
+- `--vault` path must be the vault ROOT (`vault-main`), NOT `vault-main/v-research` — `load_vault()` appends `v-research` internally. Wrong path silently produces zero vault notes.
+- `--argument-pyramid` value must be `un-ukraine-russia-war-votes-working-paper` for the real vault.
+- Real-vault command: `poetry run python scripts/run_heavy.py workspace/inbox/ukraine-intro-cited-test.md --vault "PATH/vault-main" --argument-pyramid un-ukraine-russia-war-votes-working-paper --corpus-ids d_o3qBk5fESO_q,d_7ZUo22uPGdsf,d_7lRaRsrtAJOW`
 
-3. **Update `docs/websearch-and-costs.md`** with corpus cost profile (~$0.01–0.02/claim: self-hosted search ~$0, mid summarize + high evaluate). Record Session 11 milestone run cost and wall-clock.
-
-4. **Decide whether Phase 05 closes** on cited-test-file demonstration or on infrastructure evidence (471 tests, cascade live-verified, conflict mechanism unit-tested). If closing, update TASKS.md and HANDOVER.md, push to origin.
-
-5. **Zeng 2026 ingestion** — check if doc-rag-backend has fixed the null-byte bug. If fixed, re-ingest and add document_id to corpus-ids.
-
-**What was NOT done:**
-- **Source-conflict live demonstration** — mechanism implemented and tested, but no test file triggers D4 (citation-aware corpus check alongside vault). Needs a wikilinked test file.
-- **`docs/websearch-and-costs.md`** — corpus cost profile not added.
-- **Light-profile regression** — not run end-to-end (offline tests cover it; 471 pass).
-
-**Phase plans:** `phase-02-vault-verification-core.md` (COMPLETE), `phase-03-triage-and-routing.md` (COMPLETE), `phase-04-corpus-rag-route.md` (COMPLETE), `phase-05-three-tier-evidence-cascade.md` (IMPLEMENTATION COMPLETE, MILESTONE PARTIAL)
+**Phase plans:** `phase-02` through `phase-05` all COMPLETE. Phase 05 plan carries an "Amendment (Session 12)" section documenting D10.
 
 ---
 
@@ -86,17 +88,23 @@ All present: `OPENAI_API_KEY` (sk-proj-, topped up Session 10), `EXA_API_KEY` (U
 | Session 9 | -- | -- | api.ragtogo.com: `/health` verified, `/documents` authenticated. 4 PDFs uploaded + ingestion FAILED (backend OpenAI key out of quota). |
 | Session 10 | OpenAI | Exa | Phase 04 milestone: 16 claims, 11 vault-resolved, 5 web-checked. Corpus wired but 0 claims routed to it. |
 | Session 11 | OpenAI | Exa | Phase 05 milestone: 17 claims, 11 vault-resolved, 5 corpus, 1 web (cascade: corpus→web). ~2 min. Source-conflict not triggered (no cited claims in test file). |
+| Session 12 run 1 | OpenAI | Exa | Cited-file milestone (ukraine-intro-cited-test.md): 16 claims, 8 vault, 4 corpus (citation-scoped search live), 4 web. ~2 min, ~18+ searches ≈ $0.13. Exa credits exhausted later this session. |
+| Session 12 run 2 | OpenAI | Exa (dead) | Conflict-demo first attempt: every search 402 NO_MORE_CREDITS → zero-evidence "Refuted" verdicts (bug logged). Run discarded. |
+| Session 12 run 3 | OpenAI | Tavily | Conflict-demo (fixture vault, D10 active): 9 claims all vault-resolved, 9 D10 web confirmations, planted "140 votes" error caught — web Refuted (141) → `source-conflict` + REVISE-CLAIM in report. MILESTONE 05.5.2b met. |
 
 ### Key decisions made
 
 1–50: See Session 10 handover (preserved in git history).
 51. **Vault `argument_pyramid` tag renamed** (Session 11 discovery). Vault notes changed from `ukraine-vote` to `un-ukraine-russia-war-votes-working-paper`. CLI `--argument-pyramid` must match current vault frontmatter exactly — mismatch silently loads zero notes.
 52. **`load_vault()` path convention** (Session 11 discovery). Pass the vault ROOT (e.g. `vault-main`), not the research subdirectory. The function appends `v-research` internally. Wrong path silently produces zero vault notes (no error raised).
-53. **Source-conflict requires cited claims** (Session 11 finding). D4 attribution check (the only path to both corpus and web verdicts on the same claim) requires `citation_status == CITED`. Citation-free test files can demonstrate the cascade but not the conflict flags.
+53. **Source-conflict requires cited claims** (Session 11 finding). D4 attribution check (the only path to both corpus and web verdicts on the same claim) requires `citation_status == CITED`. Citation-free test files can demonstrate the cascade but not the conflict flags. SUPERSEDED by Decision 54: D10 opens a citation-free path to source-conflict.
+54. **D10 — support confirmation** (Session 12, user decision). Vault/corpus-supported + importance ≥ 4 + web-eligible → one web confirmation. Reverses Session 10's "supports never trigger cross-checks" guardrail per verification-conservatism principle. User chose ≥ 4 gate over recommended ≥ 5, accepting ~2x web calls. `support_confirmation` config switch (default true).
+55. **Alias-based note resolution** (Session 12, user decision). Wikilink targets resolve via `build_vault_index()`: filename stem + frontmatter `aliases`. Filename wins; ambiguous aliases dropped entirely. Vault-side lint (SOURCE notes carry "Author Year" aliases) is the sibling repo's job.
+56. **Exa free tier is a hard credit cap** (Session 12 verified). $20 sign-up + $10/month refresh, $7/1k searches; 402 NO_MORE_CREDITS when exhausted. Rate limits are separate. Committed config default stays `exa` (user decision); flip to `tavily` locally during outages.
 
 ### Test suite
 
-471 tests total (468 pass with `-m "not slow"`, 3 slow tests).
+491 tests total (488 pass with `-m "not slow"`, 3 slow tests). Session 12 added 20: 8 D10 (test_routing.py), 1 conflict-demo fixture guard (test_vault_serializer.py), 10 alias parsing/indexing (test_vault_serializer.py), 1 alias end-to-end (test_alignment.py).
 
 | File | Count | Covers |
 |------|-------|--------|
@@ -171,3 +179,4 @@ All present: `OPENAI_API_KEY` (sk-proj-, topped up Session 10), `EXA_API_KEY` (U
 | 2026-07-24 | Session 9: Phase 04 implemented. doc-rag-backend cloned, SSH, API key, ingestion initiated. 400 tests. |
 | 2026-07-25 | Session 10: Phase 04 CLOSED. Phase 05 designed and approved. 403 tests. |
 | 2026-07-25 | Session 11: Phase 05 TGs 05.1–05.4 implemented. Cascade routing, citation-aware scoping, D4/D5 cross-checks, conflict detection. Live milestone (cascade verified, source-conflict pending cited test file). 471 tests. |
+| 2026-07-25 | Session 12: Phase 05 CLOSED. D10 support-confirmation amendment, alias-based note resolution, conflict-demo fixture, source-conflict demonstrated live. Cited-file corpus-scoping run. Cost doc updated. Exa credits exhausted (hard-cap confirmed). 488 tests. |

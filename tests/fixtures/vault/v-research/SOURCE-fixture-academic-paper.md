@@ -8,6 +8,7 @@ source_url: "https://example.org/paper"
 access: free
 acquired: full
 local_path: "n/a"
+aliases: ["Example 2026", "Fixture Author 2026"]
 ---
 
 ## Description

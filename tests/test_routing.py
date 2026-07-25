@@ -948,7 +948,13 @@ class TestD4AttributionCheck:
 
     @pytest.mark.asyncio
     async def test_d4_vault_resolved_cited_important_gets_corpus(self):
-        """vault_supported + cited + importance=5 + corpus handler -> corpus called."""
+        """vault_supported + cited + importance=5 + corpus handler -> corpus called.
+
+        Note (D10 amendment, Session 12): this record is also a supported,
+        importance>=4, web-eligible claim not yet routed to web, so D10 now
+        additionally fires a web confirmation check alongside D4's corpus
+        check. See TestD10SupportConfirmation for D10-specific coverage.
+        """
         record = _make_d4_record(importance=5)
         corpus_handler = _mock_corpus_handler_side_effect()
         web_handler = _mock_web_handler_side_effect()
@@ -958,7 +964,7 @@ class TestD4AttributionCheck:
         await apply_cross_checks([record], manifest, handlers)
 
         corpus_handler.assert_awaited_once()
-        web_handler.assert_not_awaited()
+        web_handler.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_d4_vault_resolved_cited_low_importance_no_corpus(self):
@@ -1072,8 +1078,15 @@ class TestD5RefutationConfirmation:
         web_handler.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_d5_support_never_triggers_crosscheck(self):
-        """vault_supported + importance=5 -> web handler NOT called (D5 guardrail)."""
+    async def test_d5_support_never_triggers_d5_itself(self):
+        """vault_supported + importance=5 -> D5 itself does not fire (no refute present).
+
+        Note (D10 amendment, Session 12): the web handler IS still called
+        here, but via D10 (support confirmation), not D5 -- D10 supersedes
+        D5's original "supports never trigger cross-checks" guardrail for
+        importance >= 4 claims. See TestD10SupportConfirmation for
+        D10-specific coverage.
+        """
         record = _make_d5_record(importance=5, vault_verdict="vault_supported")
         web_handler = _mock_web_handler_side_effect()
         handlers = {"corpus": _mock_corpus_handler_side_effect(), "web": web_handler}
@@ -1081,7 +1094,7 @@ class TestD5RefutationConfirmation:
 
         await apply_cross_checks([record], manifest, handlers)
 
-        web_handler.assert_not_awaited()
+        web_handler.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_d5_never_web_refute_no_escalation(self):
@@ -1143,3 +1156,149 @@ class TestD5RefutationConfirmation:
         await apply_cross_checks([record], manifest, handlers)
 
         web_handler.assert_not_awaited()
+
+
+# ===================================================================
+# Amendment (Session 12) — D10: Support Confirmation for Important Claims
+# ===================================================================
+#
+# A claim whose vault or corpus verdict is a SUPPORT (normalize_verdict ==
+# support), importance >= 4, web-eligible, and not already routed to web,
+# gets ONE web confirmation check. Rationale: a false fact shared by the
+# author's vault and draft previously sailed through with no independent
+# check (the 98-votes case); missed errors are the worst-case outcome.
+# Supersedes D5's "supports never trigger routine cross-checks" sentence
+# for importance >= 4 claims. Gated by config.toml's
+# pipeline.support_confirmation (default on) via
+# ingest.routing.SUPPORT_CONFIRMATION_ENABLED.
+
+
+def _make_d10_record(
+    importance=4,
+    triage_class="general-factual",
+    route="vault_aligned",
+    verdict="vault_supported",
+    extra_route_verdicts=None,
+):
+    """Build a record suitable for D10 testing: an important support verdict."""
+    record = make_record(claim_text="An important supported claim.", triage_class=triage_class)
+    record.importance = importance
+    record.route_verdicts.append(
+        RouteVerdict(route=route, verdict=verdict, reasoning="test support")
+    )
+    if extra_route_verdicts:
+        record.route_verdicts.extend(extra_route_verdicts)
+    return record
+
+
+class TestD10SupportConfirmation:
+    """D10: support verdict + importance >= 4 + web-eligible + web not yet
+    attempted -> one web confirmation check."""
+
+    @pytest.mark.asyncio
+    async def test_d10_vault_supported_important_triggers_web_check(self):
+        """vault_supported + importance=4 + general-factual -> web check dispatched."""
+        record = _make_d10_record(importance=4, route="vault_aligned", verdict="vault_supported")
+        web_handler = _mock_web_handler_side_effect()
+        handlers = {"corpus": _mock_corpus_handler_side_effect(), "web": web_handler}
+        manifest = corpus_and_web_manifest()
+
+        await apply_cross_checks([record], manifest, handlers)
+
+        web_handler.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_d10_corpus_supported_also_triggers(self):
+        """corpus_supported + importance=4 -> web check dispatched too."""
+        record = _make_d10_record(importance=4, route="corpus", verdict="corpus_supported")
+        web_handler = _mock_web_handler_side_effect()
+        handlers = {"corpus": _mock_corpus_handler_side_effect(), "web": web_handler}
+        manifest = corpus_and_web_manifest()
+
+        await apply_cross_checks([record], manifest, handlers)
+
+        web_handler.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_d10_low_importance_no_check(self):
+        """importance=3 -> no check."""
+        record = _make_d10_record(importance=3)
+        web_handler = _mock_web_handler_side_effect()
+        handlers = {"corpus": _mock_corpus_handler_side_effect(), "web": web_handler}
+        manifest = corpus_and_web_manifest()
+
+        await apply_cross_checks([record], manifest, handlers)
+
+        web_handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_d10_never_web_triage_class_no_check(self):
+        """triage_class in NEVER_WEB_CLASSES -> no check even at high importance."""
+        record = _make_d10_record(importance=5, triage_class="dataset-dependent")
+        web_handler = _mock_web_handler_side_effect()
+        handlers = {"corpus": _mock_corpus_handler_side_effect(), "web": web_handler}
+        manifest = corpus_and_web_manifest()
+
+        await apply_cross_checks([record], manifest, handlers)
+
+        web_handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_d10_web_already_routed_no_check(self):
+        """web already in route_verdicts -> not re-dispatched."""
+        record = _make_d10_record(
+            importance=5,
+            extra_route_verdicts=[
+                RouteVerdict(route="web", verdict="Supported", reasoning="already checked")
+            ],
+        )
+        web_handler = _mock_web_handler_side_effect()
+        handlers = {"corpus": _mock_corpus_handler_side_effect(), "web": web_handler}
+        manifest = corpus_and_web_manifest()
+
+        await apply_cross_checks([record], manifest, handlers)
+
+        web_handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_d10_config_switch_off_no_check(self):
+        """pipeline.support_confirmation=False -> gate never fires."""
+        record = _make_d10_record(importance=5)
+        web_handler = _mock_web_handler_side_effect()
+        handlers = {"corpus": _mock_corpus_handler_side_effect(), "web": web_handler}
+        manifest = corpus_and_web_manifest()
+
+        with patch("ingest.routing.SUPPORT_CONFIRMATION_ENABLED", False):
+            await apply_cross_checks([record], manifest, handlers)
+
+        web_handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_d10_mixed_support_and_refute_still_fires(self):
+        """Mixed support+refute should still fire (web arbitrates); no "no
+        refute present" condition is added."""
+        record = _make_d10_record(
+            importance=5,
+            route="vault_aligned",
+            verdict="vault_supported",
+            extra_route_verdicts=[
+                RouteVerdict(route="corpus", verdict="corpus_contradicted", reasoning="conflicting")
+            ],
+        )
+        web_handler = _mock_web_handler_side_effect()
+        handlers = {"corpus": _mock_corpus_handler_side_effect(), "web": web_handler}
+        manifest = corpus_and_web_manifest()
+
+        await apply_cross_checks([record], manifest, handlers)
+
+        web_handler.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_d10_no_web_handler_no_crash(self):
+        """No web handler in handlers dict -> no crash, no check."""
+        record = _make_d10_record(importance=5)
+        handlers = {"corpus": _mock_corpus_handler_side_effect()}
+        manifest = corpus_and_web_manifest()
+
+        # Should not raise
+        await apply_cross_checks([record], manifest, handlers)
