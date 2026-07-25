@@ -253,7 +253,7 @@ Task breakdown within each TG is the implementing session's job (plan defines go
 
 ---
 
-## Phase 04: Corpus RAG Route — APPROVED (Session 9, IN PROGRESS)
+## Phase 04: Corpus RAG Route — COMPLETE (Session 10)
 
 Plan: `phase-plans/phase-04-corpus-rag-route.md`. Backend repo cloned at `../doc-rag-backend` (Session 9 prep); API contract mapped from repo `main` — must be live-verified (`origin/dev` was 6 commits ahead at clone time).
 
@@ -282,19 +282,35 @@ Plan: `phase-plans/phase-04-corpus-rag-route.md`. Backend repo cloned at `../doc
 ### TG 04.4: Orchestration and Milestone
 
 - [x] 04.4.1 `run_heavy.py` corpus scoping: `--corpus-ids` CLI flag (comma-sep, whitespace-tolerant, blank → None), `_parse_corpus_ids()`, handler-dict wiring per corpus_route docstring contract (explicit `route_handlers` override still respected). 14 new tests in `test_orchestration.py` (red-first) → NARROW (23 pass) then MID (400 passed, 3 deselected)
-- [ ] 04.4.2 MILESTONE: live heavy run on `workspace/inbox/ukraine-intro-test.txt` with vault + corpus — 3 dataset-dependent claims receive corpus verdicts with provenance (or honest insufficient); user judges report useful; wall-clock + cost recorded → FULL
+- [x] 04.4.2 MILESTONE (SUPERSEDED by Phase 05 TG 05.5): Session 10 live run verified corpus infrastructure end-to-end (3 papers ingested, hybrid search confirmed, corpus route wired and available). No claims reached corpus because triage correctly classified all test-file claims as general-factual (Session 8 triage fix: vote tallies are public records). The original milestone criteria ("3 dataset-dependent claims receive corpus verdicts") was unsatisfiable — superseded by Phase 05's stronger milestone (three-tier cascade with source-conflict detection). Session 10 run: 16 claims, 11 vault-resolved, 5 web-checked, ~2 min, 23 Exa searches. Known errors caught: "98 votes" Refuted (correct: 93), "more than 40 countries" Refuted (correct: exactly 40).
 
 ### TG 04.5: Quality & Wrap
 
-- [ ] 04.5.1 docs-align-check + doc updates (CLAUDE.md key files/pipeline/env vars, claim-record-design.md, websearch-and-costs.md corpus cost profile)
-- [ ] 04.5.2 Cross-repo improvement notes in doc-rag-backend for every confirmed client-need gap
-- [ ] 04.5.3 HANDOVER.md updated; pushed to origin
+- [x] 04.5.1 docs-align-check + doc updates (Session 10)
+- [x] 04.5.2 Cross-repo: null-byte ingestion failure note + repro PDF committed to doc-rag-backend (6fe1349, origin/dev); first client-needs note from Session 9 already pushed (463c155)
+- [x] 04.5.3 HANDOVER.md updated; pushed to origin (Session 10)
 
 ---
 
-## Phases 05–06: Roadmap — FUTURE
+---
 
-- **Phase 05 — Deep Research Commissions:** human-approved escalation, commission writer, response-paper ingestion + re-evaluation
-- **Phase 06 — Draft Update Loop:** propose citation-inserting draft edits after vault improvement
+## Phase 05: Three-Tier Evidence Cascade — APPROVED (Session 10)
 
-**Edge-case backlog:** PDF-only drafts / plain-text citation parsing; source fetching for absent papers; vault-less heavy runs; vault QA / chain completeness (verify vault notes against original sources — separate domain from draft-claim verification, likely reuses doc-rag-backend); semi-automated vault enrichment
+Plan: `phase-plans/phase-05-three-tier-evidence-cascade.md`. Reworks routing so vault, corpus, and web form a domain-general verification cascade. Adds citation-aware corpus scoping, importance-gated cross-checks (D4/D5), pure-code conflict detection with `source-conflict` and `vault-corpus-check-needed` flags. Supersedes Decision 44 ("corpus only for never-web").
+
+Task breakdown within each TG is the implementing session's job.
+
+### TG 05.1: Cascade routing
+### TG 05.2: Citation-aware corpus scoping
+### TG 05.3: Importance-gated cross-checks (D4, D5)
+### TG 05.4: Conflict detection, flags, and report
+### TG 05.5: Milestone and wrap
+
+---
+
+## Phases 06–07: Roadmap — FUTURE
+
+- **Phase 06 — Deep Research Commissions:** human-approved escalation, commission writer, response-paper ingestion + re-evaluation
+- **Phase 07 — Draft Update Loop:** propose citation-inserting draft edits after vault improvement
+
+**Edge-case backlog:** PDF-only drafts / plain-text citation parsing; source fetching for absent papers; vault-less heavy runs; vault QA / chain completeness (verify vault notes against original sources — separate domain from draft-claim verification, likely reuses doc-rag-backend); semi-automated vault enrichment; triage importance-distribution recalibration (Phase 05 Risk 1)

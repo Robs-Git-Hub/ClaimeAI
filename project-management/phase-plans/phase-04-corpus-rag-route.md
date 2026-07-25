@@ -127,7 +127,8 @@ Advisory (backend lessons manifest, matched during prep): L013/L014 (LLM-as-judg
 
 | Phase | Contents |
 | ----- | -------- |
-| 05 — Deep Research Commissions | Human-approved escalation, commission writer, response-paper ingestion + re-evaluation |
-| 06 — Draft Update Loop | Propose citation-inserting draft edits after vault improvement |
+| 05 — Three-Tier Evidence Cascade | Vault→corpus→web cascade, citation-aware scoping, importance-gated cross-checks, conflict detection |
+| 06 — Deep Research Commissions | Human-approved escalation, commission writer, response-paper ingestion + re-evaluation |
+| 07 — Draft Update Loop | Propose citation-inserting draft edits after vault improvement |
 
 **Edge-case backlog** (unchanged from Phase 03): PDF-only drafts; source fetching for absent papers; vault-less heavy runs; vault QA / chain completeness; semi-automated vault enrichment; triage-aware `suggested_action` pass (Session 8 handover flag).
