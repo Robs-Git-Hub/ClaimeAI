@@ -1,15 +1,15 @@
 # Session Handover
 
 **Last Updated:** 2026-07-25 (Session 15, mid-session)
-**Current Status:** All phases through 05 COMPLETE. Phase 06 re-scoped and DEFERRED (Session 15): Claude-native direction rejected; replacement two-stage design (Serper + crawl4ai) recorded in `docs/phase-06-search-provider-decision.md` for post-MVP. Interim: user buying Exa credits; Tavily free tier as fallback.
+**Current Status:** All phases through 05 COMPLETE. Phase 06 re-scoped and DEFERRED (Session 15): Claude-native direction rejected; replacement two-stage design (Serper + crawl4ai) recorded in `project-management/phase-plan-notes/phase-06/phase-06-search-provider-decision.md` for post-MVP. Interim: user buying Exa credits; Tavily free tier as fallback.
 
-**Session 15 update (read before acting on Session 14 items below):** The Session 14 "Incoming session should" list is superseded. Phase 06 plan writing and implementation are deferred. Decision D60: (a) Anthropic API web_search rejected (~$10/1k > Exa $7/1k); (b) headless Claude Code / `claude -p` rejected (expected to draw user credits, not Max plan allowance); (c) market scan found no drop-in cheaper content-included provider — cheap options (Serper $1/1k, SearXNG $0 self-hosted) are snippet-only; (d) future build = two-stage provider: Serper SERP + user's crawl4ai Railway service (live, verified 2026-07-25; BM25 content filtering; repo `Robs-Git-Hub/crawl4ai-claude-test`) — full design + work items in `docs/phase-06-search-provider-decision.md`; (e) recorded in control-hub vault as IDEA note (generalize as crawl4ai capability for other projects); (f) web-interaction skill updated to 8 methods (crawl4ai added, both canonical repo and ~/.claude copies).
+**Session 15 update (read before acting on Session 14 items below):** The Session 14 "Incoming session should" list is superseded. Phase 06 plan writing and implementation are deferred. Decision D60: (a) Anthropic API web_search rejected (~$10/1k > Exa $7/1k); (b) headless Claude Code / `claude -p` rejected (expected to draw user credits, not Max plan allowance); (c) market scan found no drop-in cheaper content-included provider — cheap options (Serper $1/1k, SearXNG $0 self-hosted) are snippet-only; (d) future build = two-stage provider: Serper SERP + user's crawl4ai Railway service (live, verified 2026-07-25; BM25 content filtering; repo `Robs-Git-Hub/crawl4ai-claude-test`) — full design + work items in `project-management/phase-plan-notes/phase-06/phase-06-search-provider-decision.md`; (e) recorded in control-hub vault as IDEA note (generalize as crawl4ai capability for other projects); (f) web-interaction skill updated to 8 methods (crawl4ai added, both canonical repo and ~/.claude copies).
 
 ---
 
 ## Start Here
 
-**Outgoing session completed:** Session 14 — Phase 06 groundwork. No code changes; one new doc (`docs/phase-06-comparator-set.md`).
+**Outgoing session completed:** Session 14 — Phase 06 groundwork. No code changes; one new doc (`project-management/phase-plan-notes/phase-06/phase-06-comparator-set.md`).
 
 1. **Search provider integration mapped.** Code Explorer agent read all search-related files. Primary change point: `claim_verifier/nodes/retrieve_evidence.py` — add a `"claude"` case to the `_search_query()` match/case dispatch. Everything downstream (query generation, evidence summarization, evaluation, routing/cascade) is provider-agnostic and needs no changes. New provider must return `List[Evidence]` where `Evidence(url: str, text: str, title: Optional[str])`.
 
@@ -18,7 +18,7 @@
    - **Refutation works well** (claim 3: planted "98 votes" error → two sources say "93", scores >0.89)
    - **Raw content wildly oversized** (Wikipedia pages 186–486 KB; evidence summarization essential)
    - **Neither provider is optimal** — Exa caps at 2 KB snippets (sometimes too short), Tavily dumps full pages (always too long). Claude WebSearch + WebFetch gives control over both search and extraction.
-   - Full data: `docs/phase-06-comparator-set.md`
+   - Full data: `project-management/phase-plan-notes/phase-06/phase-06-comparator-set.md`
 
 3. **Orchestration approach decided (user decision D59).** Fable orchestrator + goal-loop pattern for Phase 06. Define success criteria from comparator set (verdict match rate, speed, cost), dispatch sub-agents to implement, verification agents check criteria, loop on failure. This makes Phase 06 experimental rather than linear.
 
@@ -125,7 +125,7 @@ All present: `OPENAI_API_KEY` (sk-proj-, topped up Session 10), `EXA_API_KEY` (U
 57. **Core-data carve-out for importance rubric** (Session 13, user decision). Quantitative claims reporting the core data the draft's analysis rests on (e.g. vote tallies in a voting-analysis paper) rate importance 4 (directly load-bearing) even though the argument might survive any single figure being wrong. Incidental figures (population shares, date ranges, section counts) stay 2–3. Rationale: first spot-check with the anchored rubric dropped tallies to 3, which would have removed D10 coverage from the exact planted-error scenario D10 was built for.
 58. **`cross_check_importance_threshold` is now configurable** (Session 13). Default 4 unchanged (user Session 12 decision). Raise to 5 to tighten cost control; lower to widen confirmation coverage. Config key: `[pipeline] cross_check_importance_threshold`.
 59. **Phase 06 orchestration: Fable + goal-loop** (Session 14, user decision). Use Fable as orchestrator model. Define success criteria from comparator set (5 claims with expected verdicts). Sub-agents implement, verification agents check criteria, loop on failure until criteria met. Three evaluation metrics: speed (incl. parallelisation ceiling), quality/accuracy (verdict match rate), cost ($0 marginal search + LLM tokens).
-60. **Phase 06 deferred; two-stage provider is the future build** (Session 15, user decision). Claude-native search rejected (API web_search ~$10/1k > Exa $7/1k; `claude -p` expected to bill user credits, not Max allowance). No drop-in cheaper content-included provider exists — future build is Serper SERP (~$1/1k) + user's crawl4ai Railway service (BM25 content filter, $0 marginal) behind the `search_provider` switch. Full record: `docs/phase-06-search-provider-decision.md`. Interim: buy Exa credits; Tavily free tier fallback. Goal-loop evaluation approach (D59) unchanged when the build happens.
+60. **Phase 06 deferred; two-stage provider is the future build** (Session 15, user decision). Claude-native search rejected (API web_search ~$10/1k > Exa $7/1k; `claude -p` expected to bill user credits, not Max allowance). No drop-in cheaper content-included provider exists — future build is Serper SERP (~$1/1k) + user's crawl4ai Railway service (BM25 content filter, $0 marginal) behind the `search_provider` switch. Full record: `project-management/phase-plan-notes/phase-06/phase-06-search-provider-decision.md`. Interim: buy Exa credits; Tavily free tier fallback. Goal-loop evaluation approach (D59) unchanged when the build happens.
 
 ### Test suite
 
