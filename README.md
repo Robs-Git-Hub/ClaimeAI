@@ -1,29 +1,44 @@
-# ClaimeAI — Fact-Checking Agent 🔍⚙️
+# ClaimeAI — Fact-Checking Agent
 
-A fork of [BharathxD/ClaimeAI](https://github.com/BharathxD/ClaimeAI), stripped to the Python LangGraph agent backend only (no web frontend, no Chrome extension). This fork adds/will add PDF ingestion, OpenRouter support, and a Claude Code `/claimify` skill for CLI-driven fact-checking.
+A fork of [BharathxD/ClaimeAI](https://github.com/BharathxD/ClaimeAI), an automated fact-checking system built on LangGraph that extracts factual claims from text (Claimify methodology) and verifies each one against evidence. This fork strips the original to the agent backend only (no web frontend, no Chrome extension) and rebuilds verification as a **three-tier evidence cascade** — Obsidian vault, corpus (RAG backend), and web search — with triage-gated routing, importance-anchored cross-checks, and automatic conflict detection between sources. It also adds PDF ingestion, OpenRouter support, and a Claude Code `/claimify` skill for CLI-driven fact-checking.
 
-This repository contains the implementation of the fact-checking system's core functionality: an automated pipeline that extracts factual claims from text and verifies each one against web evidence. See [INSTALLATION.md](./INSTALLATION.md) for setup instructions. This document focuses on the technical architecture and how the agent workflows are implemented.
+See [INSTALLATION.md](./INSTALLATION.md) for setup and [CLAUDE.md](./CLAUDE.md) for full developer/architecture context.
 
-![Fact Checker MAS](https://cloud.imbharath.com/fact-checker-mas.png)
+## Architecture Overview
 
-## 🏗️ Technical Architecture
+The upstream project verified every claim against web search alone. This fork routes each claim through the cheapest evidence source that can resolve it before falling back to more expensive ones:
 
-The ClaimeAI is designed as a multi-agent system (MAS) using LangGraph to orchestrate complex workflows. The system is split into three main modules, each with its own specific responsibility:
+1. **Vault** — claims are checked against an Obsidian research vault (cited claims via one-hop link traversal, citation-free claims via batch matching).
+2. **Corpus** — claims unresolved by the vault are checked against a document-RAG backend (`api.ragtogo.com`), scoped to cited source documents when available.
+3. **Web** — claims still unresolved (or explicitly web-verifiable, e.g. novel/dataset-dependent claims) fall through to web search.
 
+A triage pass classifies every claim first so trivial claims are skipped and claim type determines which tiers are eligible. Importance-gated cross-checks then re-verify high-stakes verdicts against a second source, and conflicts between sources are flagged rather than silently overwritten.
+
+```mermaid
+graph TD
+    A[Draft + Vault] --> B[parse_draft / bind_citations]
+    B --> C[ClaimRecords]
+    C --> D[Vault Verification]
+    D -->|cited: one-hop evidence + evaluate| E[vault_supported / vault_contradicted / not_supported]
+    D -->|citation-free: batch match + verify| E
+    E --> F[Triage: class, citation_expectation, importance]
+    F --> G{decide_route}
+    G -->|vault-resolved| H[No further routing]
+    G -->|trivial| I[Skip]
+    G -->|novel-result / dataset-dependent| J[Corpus only]
+    G -->|general-factual / academic / unclassified| K[Corpus first, Web if silent]
+    J --> L[Corpus Route: search -> summarize -> evaluate]
+    K --> L
+    L -->|silent| M[Web Route: search -> summarize -> evaluate]
+    L --> N[apply_cross_checks: D4 / D5 / D10]
+    M --> N
+    H --> N
+    N --> O[detect_conflicts: source-conflict, vault-corpus-check-needed]
+    O --> P[assign_suggested_actions]
+    P --> Q[Gap Report]
 ```
-.
-├── claim_extractor/   # Extracts factual claims from text
-├── claim_verifier/    # Verifies claims against evidence
-└── fact_checker/      # Orchestrates the entire workflow
-```
 
-## 🤖 Agent Workflows
-
-Each module is implemented as a standalone LangGraph agent with its own workflow:
-
-### Claim Extractor Workflow
-
-The claim extractor implements the Claimify methodology with a 5-stage pipeline:
+### Extraction (Claimify)
 
 ```mermaid
 graph LR
@@ -33,104 +48,95 @@ graph LR
     D --> E[validation_node]
 ```
 
-- **Sentence Splitter**: Breaks text into contextual sentences
-- **Selection**: Filters for sentences with factual content
-- **Disambiguation**: Resolves ambiguities like pronouns
-- **Decomposition**: Extracts specific atomic claims
-- **Validation**: Ensures claims are properly formed
+Sentence splitting, selection and disambiguation use majority-vote LLM completions (2-of-3); decomposition extracts atomic claims; validation ensures they are well-formed.
 
-### Claim Verifier Workflow
+## Key Features
 
-The claim verifier implements an evidence-based verification process:
+- **Claimify extraction** — 5-stage pipeline (split → select → disambiguate → decompose → validate) with voting-based quality gates on selection and disambiguation.
+- **Vault verification** — cited claims resolved via one-hop evidence gathering (`ingest/alignment.py`); citation-free claims resolved via mid-tier batch matching with high-tier adversarial re-verification (`ingest/vault_match.py`), including a full-vault fallback pass.
+- **Corpus verification** — retrieval against a document-RAG backend, citation-scoped when the claim cites a known source document (`ingest/corpus_route.py`, `ingest/corpus_client.py`).
+- **Web verification** — Exa/Tavily search with evidence summarization (mid tier) before high-tier evaluation, up to 5 search iterations per claim.
+- **Triage-gated routing** — a single mid-tier batch call classifies every claim's type, citation expectation, and importance; routing policy decides vault/corpus/web eligibility per claim (`ingest/triage.py`, `ingest/routing.py`).
+- **Cross-checks (D4/D5/D10)** — importance-gated re-verification: D4 scoped corpus attribution check on vault-resolved cited claims, D5 web confirmation on single-tier refutations, D10 web confirmation on high-importance supported claims.
+- **Conflict detection** — source-conflict (shared-lineage vs. web disagreement) and vault-corpus-check-needed flags surfaced in the gap report rather than silently resolved.
+- **4-verdict evaluators** — web: Supported / Refuted / Insufficient / Conflicting; corpus: corpus_supported / corpus_contradicted / corpus_insufficient / no_corpus_hits.
+- **Configurable importance threshold** — cross-check gating threshold set in `config.toml`, independent of provider/model configuration.
 
-```mermaid
-graph LR
-    A[generate_search_queries_node] --> B{query_distributor}
-    B -- Queries --> C[retrieve_evidence_node]
-    B -- No Queries --> E[End: Verdict]
-    C --> D[evaluate_evidence_node]
-    D -- Sufficient/Max Retries --> E
-    D -- Insufficient & Retries Left --> A
+## Quick Start
+
+### Install
+
+```bash
+poetry install
 ```
 
-- **Query Generation**: Creates search queries for the claim
-- **Evidence Retrieval**: Gathers evidence from web search
-- **Evidence Evaluation**: Assesses if evidence supports/refutes the claim
+Copy `.env.example` to `.env` and fill in required keys (see [Configuration](#configuration)).
 
-### Fact Checker Orchestrator
+### Light run (web-only verification, no vault required)
 
-The main orchestrator ties everything together:
-
-```mermaid
-graph LR
-    A[extract_claims] --> B{dispatch_claims_for_verification}
-    B -- Claims to verify --> C[claim_verifier_node]
-    B -- No claims --> E[END]
-    C --> D[generate_report_node]
-    D --> E
-```
-
-- **Extract Claims**: Calls the claim extractor subsystem
-- **Dispatch Claims**: Fans out for parallel verification
-- **Claim Verifier**: Verifies each claim independently
-- **Generate Report**: Compiles final fact-check report
-
-## 🔄 Inter-agent Communication
-
-The agents communicate through well-defined interfaces:
-
-1. The orchestrator calls the claim extractor with the input text
-2. The extractor returns validated claims
-3. The orchestrator dispatches each claim to the verifier
-4. The verifier returns verdicts for each claim
-5. The orchestrator compiles everything into a final report
-
-## 📦 Module Structure
-
-Each module follows a similar structure:
-
-```
-module/
-├── __init__.py       # Exports key components
-├── agent.py          # LangGraph workflow definition
-├── config/           # Configuration settings
-├── llm/              # LLM utilities
-├── nodes/            # Core node implementations
-└── schemas.py        # Data models
-```
-
-## 🛠️ Implementation Details
-
-- All modules use LangGraph's StateGraph for workflow management
-- Parallel processing is implemented via LangGraph's Send mechanism
-- Each node is implemented as an async function to allow for concurrent operations
-- Configuration settings can be adjusted through the config/ directory in each module
-
-## 🔬 Development
-
-### Setup
-
-See [INSTALLATION.md](./INSTALLATION.md) for full setup instructions. In short: `poetry install`, copy `.env.example` to `.env` and fill in your keys, then start the dev server:
+Start the LangGraph dev server:
 
 ```bash
 poetry run dev
+# equivalent to: langgraph dev --no-browser --allow-blocking
 ```
 
-You can also run the pipeline directly from the CLI:
+Or run directly against a PDF, markdown, or text file:
 
 ```bash
-poetry run python scripts/run_fact_checker.py
+python scripts/run_from_pdf.py <path>
 ```
 
-### Development and Testing
+### Heavy run (vault + corpus + web cascade)
 
-For development and testing:
+Requires an Obsidian vault and, for corpus scoping, a `RAG_API_KEY`:
 
-1. Start with small test cases that generate 1-2 claims
-2. Use the `astream_events` method to observe the workflow step by step
-3. Configure LLM parameters (temperature, etc.) in the respective config files
+```bash
+python scripts/run_heavy.py <draft.md> --vault <vault_path> --corpus-ids <id1,id2>
+```
 
-For more specific implementation details of each module, check their respective README files:
-- [Claim Extractor README](./claim_extractor/README.md)
-- [Claim Verifier README](./claim_verifier/README.md)
-- [Fact Checker README](./fact_checker/README.md)
+This runs the full pipeline: parse draft → extract claims → bind citations → vault verification → triage → routing/cascade → cross-checks → gap report.
+
+## Configuration
+
+- **`config.toml`** — non-sensitive pipeline config: LLM provider and per-tier model registry (`low`/`mid`/`high`), search provider (default Exa), reasoning effort, corpus API settings, importance threshold. Env vars override `config.toml` values.
+- **`.env`** — secrets only:
+
+```
+OPENAI_API_KEY=sk-proj-...
+EXA_API_KEY=...
+REDIS_URI=redis://localhost:6379
+```
+
+Optional: `TAVILY_API_KEY`, `LANGSMITH_API_KEY`, `OPENROUTER_API_KEY` (required when `llm_provider=openrouter`), `RAG_API_KEY` (required for corpus route).
+
+## Testing
+
+523 tests across unit, integration, and live-spot-check tiers.
+
+```bash
+poetry run pytest
+```
+
+Live spot-checks against a real vault are available via `scripts/spot_check_vault.py` and are excluded from the default suite.
+
+## Module Structure
+
+```
+.
+├── claim_extractor/   # Stage 1 — extract claims from text (Claimify method)
+├── claim_verifier/    # Stage 2 — verify claims via web search + evidence summarization
+├── fact_checker/      # Stage 3 — orchestrator, dispatches parallel verification
+├── ingest/            # Stage 0 — PDF/text ingestion, vault + corpus verification, routing, gap reports
+├── utils/             # Shared utilities (LLM, Redis, settings, claim record contract)
+├── security/          # API key auth for LangGraph
+└── scripts/           # CLI dev tools and runners
+```
+
+Each `claim_extractor`/`claim_verifier`/`fact_checker` module follows the same internal layout: `agent.py` (LangGraph workflow), `config/`, `llm/`, `nodes/`, `schemas.py`. All modules use LangGraph's `StateGraph` with async nodes and the `Send` mechanism for parallel dispatch.
+
+## Further Reading
+
+- [INSTALLATION.md](./INSTALLATION.md) — full setup instructions
+- [CLAUDE.md](./CLAUDE.md) — developer context: directory layout, key files, full pipeline detail, conventions
+- [docs/playbook/](./docs/playbook/) — design rationale (claim record taxonomy, model tier selection)
