@@ -90,6 +90,29 @@ Option (a) is recommended for a first spike; option (b) as a fallback if evaluat
 
 **Verdict: PixSerp is a strong candidate but not a clear winner.** Its strength (specific-entity queries) is Tavily's weakness, and vice versa (planted-error refutation). A dual-provider strategy — PixSerp primary, Tavily fallback for refutation confirmation — or iterative search (PixSerp first pass, Tavily if INSUFFICIENT) may outperform either alone. Both are dramatically cheaper than Exa.
 
+### Matrix test: tiers × prompt styles (Session 15, 27 calls)
+
+Tested 3 discriminator claims × 3 tiers (`pixserp-fast`, `pixserp-standard`, `pixserp-deep`) × 3 prompt phrasings:
+- **verify**: `"Verify this factual claim and provide evidence for or against it: {claim}"` (original)
+- **facts**: `"What are the facts about: {claim}"` (neutral, retrieves context)
+- **query**: keyword-style query matching what our pipeline's mid-tier query generator produces (e.g. `"UN General Assembly Ukraine resolution votes February 2025 how many"`)
+
+**Claim 2 (ES-11/1, 141 votes — expected: Supported):** All 9 combinations found "141" with 2–3 citations. Prompt style and tier make no difference on this claim — PixSerp handles specific-entity queries reliably regardless of phrasing.
+
+**Claim 3 (98 votes planted error — expected: Refuted):** This is where the dials matter:
+- **verify** style (all tiers): Says "not supported by evidence" with zero citations — correctly doubts the claim but provides no counter-figure. Our evaluator would produce INSUFFICIENT, not Refuted.
+- **facts** style + deep tier: **Confirmed the claim as having 98 votes** with 3 authoritative news citations (Le Monde, WashPost, Al Jazeera). This is actually a more complex finding: the February 2025 UNGA session had multiple resolutions voted on the same day, and one resolution (A/RES/ES-11/9) did reportedly receive ~98 votes. The "planted error" in our test file may be conflating two different resolutions — the claim says "support had fallen to 98" generically, and PixSerp found sources reporting 98 for one specific resolution. This raises questions about whether our ground truth for claim 3 needs revisiting.
+- **query** style + deep tier: Found the same authoritative sources but reported "141" — the keyword query led it to the ES-11/1 figure from 2022, not the February 2025 vote. Keyword queries are the **worst** prompt style for temporal disambiguation.
+
+**Claim 5 (fifteen resolutions — expected: Refuted):** No tier/prompt combination found the actual list of ES-11 resolutions or the correct count (12 resolutions + 3 amendments). The deep tier + facts style **hallucinated confirmation** ("the record shows that the package contains fifteen individual resolutions"), citing an irrelevant SEC filing. This is a clear quality concern — PixSerp synthesized a confident wrong answer from irrelevant sources.
+
+**Key conclusions from the matrix:**
+
+1. **Prompt style matters more than tier for factual claims.** The "facts" style consistently retrieved more substantive content than "verify" (which biases toward confirmation/denial). The "query" keyword style is worst for temporal queries (confuses time periods).
+2. **Higher tiers don't reliably improve accuracy.** `pixserp-deep` hallucinated on claim 5 and confirmed the "98 votes" figure on claim 3 (which may or may not be an error — see above). The tier mainly affects depth of retrieval, not correctness.
+3. **PixSerp's synthesized output is a liability for fact-checking.** When the underlying sources are ambiguous or the query is poorly specified, PixSerp confidently synthesizes a wrong answer rather than surfacing the ambiguity. Raw-evidence providers (Exa/Tavily) at least let our high-tier evaluator see the source material and judge for itself.
+4. **Claim 3 ground truth needs investigation.** If the February 2025 UNGA session genuinely had a resolution with ~98 votes, our test file's "planted error (actual: 93)" annotation may be wrong or at least ambiguous. This should be verified against official UN voting records before using claim 3 as a discriminator.
+
 ## External benchmark: RAGAS context-quality evaluation (2024)
 
 **Source:** [Context is King — Evaluating real-time LLM context quality with Ragas](https://emergentmethods.medium.com/context-is-king-evaluating-real-time-llm-context-quality-with-ragas-a8df8e815dc9) (Emergent Methods, June 2024)
