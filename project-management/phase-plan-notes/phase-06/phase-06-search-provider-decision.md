@@ -35,7 +35,7 @@ Notes: Tavily acquired by Nebius (Feb 2026, pricing stable so far); Jina acquire
 | Feature | PixSerp | Exa (current) |
 |---|---|---|
 | Price/1k | **$1.50 flat** at any volume | $7 |
-| Free tier | **$25 credit** (never expires) ≈ 16,700 searches | $10/mo ≈ 1,400 |
+| Free tier | **$2.50 credit** (never expires) ≈ 1,667 searches | $10/mo ≈ 1,400 |
 | Returns content | Yes — structured JSON with cited sources, every claim carries its source URL | Yes — full text (2 KB cap) |
 | LLM integration | OpenAI-compatible endpoint (drop-in SDK swap); MCP server (Claude Code, Cursor); JSON schema output | LangChain wrapper only |
 | Verticals | 10: web, news, images, places, shopping, flights, hotels, YouTube, transcripts, any URL | Web (neural/keyword) |
@@ -52,6 +52,43 @@ Notes: Tavily acquired by Nebius (Feb 2026, pricing stable so far); Jina acquire
 6. **Whether the OpenAI-compatible response maps cleanly** to our `Evidence` schema without a parsing layer.
 
 **Recommendation:** Sign up (free, no card), run the comparator claims through it, and compare against the Tavily baseline in `phase-06-comparator-set.md`. If it matches or beats Tavily on verdict accuracy for claims 2/3/5, it becomes the primary candidate — simpler than the two-stage Serper+crawl4ai build and 4.7× cheaper than Exa.
+
+### PixSerp comparator results (Session 15 live test, 2026-07-25)
+
+Ran all 5 claims against `pixserp-web` model via OpenAI-compatible endpoint. Query format: `"Verify this factual claim and provide evidence for or against it: {claim}"`.
+
+| Claim | Expected | PixSerp Result | Citations | Latency | Tokens |
+|---|---|---|---|---|---|
+| 1: Russia invasion Feb 2022 | Supported | **Supported** — Reuters, UN News sources | 2 | 1.6s | 12,179 |
+| 2: ES-11/1 drew 141 votes | Supported | **Supported** — 3 independent sources all cite "141" | 3 | 1.3s | 9,868 |
+| 3: 98 votes by Feb 2025 (planted error) | Refuted | **Weak refute** — "not supported by evidence" but no counter-figure found | 0 | 3.4s | 6,862 |
+| 4: Nearly half world's population | Ambiguous | **Supported** — percentage reasoning from G20 analysis | 1 | 1.8s | 11,546 |
+| 5: Fifteen resolutions (false) | Refuted | **Unsubstantiated** — found only ES-11/1, not full list | 1 | 1.4s | 9,923 |
+
+**Comparison vs Tavily baseline (from phase-06-comparator-set.md):**
+
+- **Claim 2 (discriminator): PixSerp wins decisively.** Three sources with the exact "141 votes" figure. Tavily completely failed (scores <0.09, generic pages). This was the hardest query in the set.
+- **Claim 3 (discriminator): Tavily wins.** Tavily found two sources explicitly stating "93 votes" (scores 0.90–0.91), enabling a clear Refuted verdict. PixSerp found no counter-evidence — only "not supported", which would likely yield INSUFFICIENT rather than Refuted in our pipeline.
+- **Claim 5 (discriminator): Neither excels.** Tavily found Wikisource listing resolutions (scores 0.75–0.82); PixSerp found only ES-11/1 and couldn't count the full set. Both would need iterative search to get the definitive answer.
+
+**Response structure:**
+```json
+{
+  "choices": [{"message": {"role": "assistant", "content": "...", "citations": [
+    {"kind": "web", "url": "...", "title": "..."}
+  ]}}],
+  "usage": {"prompt_tokens": N, "completion_tokens": N, "total_tokens": N}
+}
+```
+
+Key design note: PixSerp returns a **synthesized answer with inline citations**, not raw page content. Our pipeline feeds raw evidence text to a high-tier evaluator. Integration options:
+- (a) Use PixSerp's answer text as the `Evidence.text` field — simplest drop-in, but the evaluator receives pre-synthesized content rather than raw source material.
+- (b) Use cited URLs + a fetch stage (crawl4ai or httpx) to get raw content — preserves evaluation integrity but adds complexity and latency.
+- (c) Trust PixSerp's synthesis and restructure the evaluation prompt — biggest architectural change, highest risk.
+
+Option (a) is recommended for a first spike; option (b) as a fallback if evaluation quality degrades.
+
+**Verdict: PixSerp is a strong candidate but not a clear winner.** Its strength (specific-entity queries) is Tavily's weakness, and vice versa (planted-error refutation). A dual-provider strategy — PixSerp primary, Tavily fallback for refutation confirmation — or iterative search (PixSerp first pass, Tavily if INSUFFICIENT) may outperform either alone. Both are dramatically cheaper than Exa.
 
 ## External benchmark: RAGAS context-quality evaluation (2024)
 

@@ -26,6 +26,56 @@ These are upper and lower estimates rather than fixed document costs. A claim re
 
 > **Fixed (Session 13) — zero-evidence verdicts:** `VerificationResult` now has `INSUFFICIENT` ("Insufficient Information") and `CONFLICTING` ("Conflicting Evidence") members. Empty evidence returns `INSUFFICIENT` without an LLM call at all; an LLM failure or an unparseable verdict also default to `INSUFFICIENT` — previously all three cases silently became `Refuted`. A dead search provider can no longer manufacture a false refutation this way. One gap stays on the backlog: a genuine zero-results search and a search-API error still look identical (both produce empty evidence → `INSUFFICIENT`), so a burst of `Insufficient` verdicts — not `Refuted` — is now the signal to check provider health / search-error logs.
 
+## PixSerp (candidate — evaluated Session 15, not yet integrated)
+
+[PixSerp](https://pixserp.com/) is an AI search API that returns structured, cited answers via an OpenAI-compatible endpoint. Unlike Exa/Tavily which return raw page content, PixSerp returns a **synthesized answer with inline source citations** — each citation carries a URL, title, and kind (web, news, place, etc.). The response follows the OpenAI chat-completions schema (`choices[0].message.content` + `choices[0].message.citations`), making it a potential drop-in via the OpenAI SDK.
+
+### Pricing tiers
+
+PixSerp offers four model tiers, each with different depth/cost tradeoffs. All pricing is flat per-request at any volume.
+
+| Model | Purpose | Cost/1k requests | Cost per claim (1–5 searches) |
+|---|---|---|---|
+| `pixserp-fast` | Quick cited answer, minimal latency | **$1.50** | $0.0015–$0.0075 |
+| `pixserp-standard` | Balanced research — verified key facts | **$2.50** | $0.0025–$0.0125 |
+| `pixserp-deep` | Thorough cross-referenced research | **$3.50** | $0.0035–$0.0175 |
+| `pixserp-agent` | Multi-step research loop in one call — search, scrape, follow links, cross-check | **$3.50/step** | Variable (per-step) |
+
+Free tier: **$2.50 credit** on signup (no card required, never expires) — enough for ~1,667 fast-tier or ~714 standard-tier searches. No monthly refresh.
+
+For comparison: Exa is $7/1k, Tavily is $8/1k. Even `pixserp-deep` at $3.50/1k is half the cost of Exa with content included.
+
+The `pixserp-agent` tier is architecturally different — it runs a multi-step research loop (search, scrape, follow links, cross-check) within a single API call, billed per step at $0.0035/step. This is closest to what our two-stage Serper+crawl4ai design would do manually, but managed by PixSerp. Worth evaluating separately from the standard search tiers.
+
+### Session 15 live test (2026-07-25)
+
+Ran 5 comparator claims (from `phase-06-comparator-set.md`) against `pixserp-web` (likely maps to `pixserp-fast` tier). Query format: `"Verify this factual claim and provide evidence for or against it: {claim}"`.
+
+| Claim | Expected | PixSerp Result | Citations | Latency | Tokens |
+|---|---|---|---|---|---|
+| 1: Russia invasion Feb 2022 | Supported | **Supported** — Reuters, UN News | 2 | 1.6s | 12,179 |
+| 2: ES-11/1 drew 141 votes | Supported | **Supported** — 3 sources cite "141" | 3 | 1.3s | 9,868 |
+| 3: 98 votes Feb 2025 (planted error, actual: 93) | Refuted | **Weak refute** — "not supported" but no counter-figure | 0 | 3.4s | 6,862 |
+| 4: Nearly half world's population | Ambiguous | **Supported** — percentage reasoning | 1 | 1.8s | 11,546 |
+| 5: Fifteen resolutions (false: 12 + 3 amendments) | Refuted | **Unsubstantiated** — found only ES-11/1 | 1 | 1.4s | 9,923 |
+
+**Key findings vs Tavily baseline:**
+- **Claim 2 (specific-entity query): PixSerp wins decisively.** Three independent sources all citing "141 votes". Tavily completely failed this query class (scores <0.09, generic UN pages).
+- **Claim 3 (planted error): Tavily wins.** Tavily found two sources explicitly stating "93" (scores 0.90–0.91), enabling a clear Refuted verdict. PixSerp found no counter-evidence — "not supported" would yield INSUFFICIENT, not Refuted, in our pipeline.
+- **Claim 5 (countable fact): Neither excels.** Tavily found Wikisource (scores 0.75–0.82); PixSerp found only ES-11/1. Both would need iterative search.
+
+**Verdict:** complementary strengths — PixSerp handles specific entities well; Tavily handles refutation with counter-evidence well. Neither is a solo replacement for all cases. See `project-management/phase-plan-notes/phase-06/phase-06-search-provider-decision.md` for integration options and the deferred two-stage design.
+
+### Integration notes
+
+PixSerp returns **synthesized answers**, not raw page content. This differs from Exa (raw text snippets) and Tavily (raw page markdown). Integration options for our pipeline:
+
+1. **Use PixSerp's answer as `Evidence.text`** — simplest; the high-tier evaluator receives pre-synthesized content rather than raw source material. Risk: double-synthesis (PixSerp synthesizes, then our evaluator re-evaluates).
+2. **Use cited URLs + fetch stage** (crawl4ai or httpx) for raw content — preserves evaluation integrity but adds complexity and latency.
+3. **Use `pixserp-agent` tier** which does its own multi-step research loop — the closest match to our pipeline's iterative search, but delegates control entirely to PixSerp.
+
+The `pixserp-standard` or `pixserp-deep` tiers might produce stronger refutation evidence (claim 3) than `pixserp-fast` — worth testing before ruling PixSerp out for that case. The `pixserp-agent` tier could potentially replace our entire search+evaluate loop for web claims.
+
 ### Corpus route costs
 
 The corpus route (Phase 04–05, `ingest/corpus_route.py`) searches the self-hosted doc-rag-backend (`api.ragtogo.com`) instead of the public web. Because ClaimeAI is the first client of that backend, **marginal search cost is effectively $0** — there is no per-request charge like Exa or Tavily.
