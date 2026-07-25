@@ -1,58 +1,62 @@
 # Session Handover
 
-**Last Updated:** 2026-07-25 (Session 15, mid-session)
-**Current Status:** All phases through 05 COMPLETE. Phase 06 re-scoped and DEFERRED (Session 15): Claude-native direction rejected; replacement two-stage design (Serper + crawl4ai) recorded in `project-management/phase-plan-notes/phase-06/phase-06-search-provider-decision.md` for post-MVP. Interim: user buying Exa credits; Tavily free tier as fallback.
-
-**Session 15 update (read before acting on Session 14 items below):** The Session 14 "Incoming session should" list is superseded. Phase 06 plan writing and implementation are deferred. Decision D60: (a) Anthropic API web_search rejected (~$10/1k > Exa $7/1k); (b) headless Claude Code / `claude -p` rejected (expected to draw user credits, not Max plan allowance); (c) market scan found no drop-in cheaper content-included provider — cheap options (Serper $1/1k, SearXNG $0 self-hosted) are snippet-only; (d) future build = two-stage provider: Serper SERP + user's crawl4ai Railway service (live, verified 2026-07-25; BM25 content filtering; repo `Robs-Git-Hub/crawl4ai-claude-test`) — full design + work items in `project-management/phase-plan-notes/phase-06/phase-06-search-provider-decision.md`; (e) recorded in control-hub vault as IDEA note (generalize as crawl4ai capability for other projects); (f) web-interaction skill updated to 8 methods (crawl4ai added, both canonical repo and ~/.claude copies).
+**Last Updated:** 2026-07-25 (Session 15, outgoing)
+**Current Status:** All phases through 05 COMPLETE. Phase 06 DEFERRED (Session 15, D60). No code changes this session — research and documentation only (6 commits). Exa credits being purchased for interim use; Tavily free tier as fallback. Future search-provider build recorded in `project-management/phase-plan-notes/phase-06/phase-06-search-provider-decision.md`.
 
 ---
 
 ## Start Here
 
-**Outgoing session completed:** Session 14 — Phase 06 groundwork. No code changes; one new doc (`project-management/phase-plan-notes/phase-06/phase-06-comparator-set.md`).
+**Outgoing session completed:** Session 15 — Phase 06 search-provider research. No code changes. Six docs commits, cross-repo updates (control-hub IDEA note, web-interaction skill update).
 
-1. **Search provider integration mapped.** Code Explorer agent read all search-related files. Primary change point: `claim_verifier/nodes/retrieve_evidence.py` — add a `"claude"` case to the `_search_query()` match/case dispatch. Everything downstream (query generation, evidence summarization, evaluation, routing/cascade) is provider-agnostic and needs no changes. New provider must return `List[Evidence]` where `Evidence(url: str, text: str, title: Optional[str])`.
+1. **Claude-native search direction rejected (D60).** Anthropic API `web_search` ~$10/1k (more than Exa's $7/1k). Headless Claude Code / `claude -p` expected to bill user credits, not plan allowance. Both paths dead.
 
-2. **Comparator set gathered (5 claims, Exa + Tavily).** Exa still dead (402 NO_MORE_CREDITS on all 5 queries — third consecutive session). Tavily returned 15 results. Key findings:
-   - **Tavily fails on specific entity queries** (claim 2: ES-11/1 vote count → generic UN pages, scores <0.09)
-   - **Refutation works well** (claim 3: planted "98 votes" error → two sources say "93", scores >0.89)
-   - **Raw content wildly oversized** (Wikipedia pages 186–486 KB; evidence summarization essential)
-   - **Neither provider is optimal** — Exa caps at 2 KB snippets (sometimes too short), Tavily dumps full pages (always too long). Claude WebSearch + WebFetch gives control over both search and extraction.
-   - Full data: `project-management/phase-plan-notes/phase-06/phase-06-comparator-set.md`
+2. **Market scan conducted (July 2026).** Seven providers compared: Exa ($7/1k, content), Tavily ($8/1k, content), Serper ($1/1k, snippets), Brave ($3–5/1k, snippets), Jina (token-priced), SearXNG ($0, self-hosted), PixSerp ($1.50–3.50/1k, synthesized + snippets). Structural finding: every cheap option is snippet-only; every content-included option costs $7–8/1k — except PixSerp which returns cited snippets at $1.50–3.50/1k.
 
-3. **Orchestration approach decided (user decision D59).** Fable orchestrator + goal-loop pattern for Phase 06. Define success criteria from comparator set (verdict match rate, speed, cost), dispatch sub-agents to implement, verification agents check criteria, loop on failure. This makes Phase 06 experimental rather than linear.
+3. **PixSerp evaluated live (32 API calls).** Results in `docs/websearch-and-costs.md`:
+   - **Strengths:** Handles specific-entity queries that Tavily fails (claim 2, ES-11/1 vote count — 3 independent sources found). Fast (1.3–3.4s). At $1.50/1k, 4.7× cheaper than Exa.
+   - **Weaknesses:** Returns synthesized answers, not raw page content. Deep tier hallucinated on claim 5 (confidently wrong). Weak on refutation (claim 3, planted error — no counter-figure found, unlike Tavily which found "93"). `response_format` structured output returns 502 (broken/undeployed).
+   - **Conclusion:** PixSerp could replace Exa (using citation `snippet` fields as evidence, discarding the synthesized answer) **or** serve as the SERP step in a two-stage design. **Cannot replace Tavily's full-page depth on its own.**
+
+4. **Query-design playbook written** (`docs/playbook/query-design.md`). Three query shapes documented (leading, open factual, keyword neutral) with worked examples. Open factual recommended as default — the mid-tier summarization step handles noise, and leading queries risk verification bias that causes wrong verdicts.
+
+5. **crawl4ai service explored** (user's Railway deployment verified live). Full capability documented — BM25 content filtering, stealth escalation, 26 endpoints. Recorded as a reference in project memory and control-hub vault IDEA note for generalising the two-stage capability.
+
+6. **RAGAS benchmark reference recorded.** Emergent Methods 2024 article (AskNews, JinaAI, Tavily, Exa on RAGAS context_precision) — open-source code available for self-run evaluation.
 
 **Incoming session should:**
 
-1. **Use Fable as session model** for Phase 06 planning and orchestration.
-2. **Write the Phase 06 plan** using the comparator set and integration map as input. Plan should include:
-   - Task groups with explicit acceptance criteria derived from comparator data
-   - Goal-loop orchestration: implement → verify against criteria → loop on failure
-   - Three evaluation metrics: speed (parallelisation ceiling), quality/accuracy (verdict match), cost ($0 marginal + LLM tokens)
-3. **Begin implementation** via goal-loop: define the goal condition, dispatch sub-agents, verify, iterate.
-4. **Comparator claim 5 correction:** ES-11 has 12 resolutions, not fifteen. The "fifteen" in the test file includes 3 amendments selected for analysis. The claim is false — keep as a negative test case but record the ground truth for the evaluator.
-5. **Exa is CONFIRMED DEAD** (402 on all 5 queries, Session 14). Don't waste time retrying. Tavily works as fallback if needed for baseline comparison.
+1. **Buy Exa credits** if not already done. The committed config default (`search_provider = "exa"`) is correct; the 402 errors clear once the account has credit. Tavily free tier (1k/month) is the zero-cost fallback.
+2. **Decide what to work on.** Phase 06 implementation is deferred. The pipeline (Phases 01–05) is functionally complete — 523 tests, live-verified cascade. Options for the next session:
+   - Use the pipeline on real work (fact-check a draft)
+   - Phase 07 (deep research commissions) or Phase 08 (draft update loop)
+   - PixSerp integration as a cheap Exa alternative (narrow scope: add a `"pixserp"` case to `retrieve_evidence.py`, use citation snippets as Evidence, add `PIXSERP_API_KEY` to settings)
+   - Investigate claim 3 ground truth — the Feb 2025 UNGA session had multiple resolutions; "98 votes" may be correct for one of them (A/RES/ES-11/9), making our "planted error" annotation ambiguous
+3. **If implementing PixSerp:** read the integration surface summary below (unchanged from Session 14) and `docs/playbook/query-design.md` for prompt-phrasing guidance. The key design choice: use `pixserp-fast` citation snippets as `Evidence.text` (discard synthesized answer), or use citation URLs + crawl4ai fetch for full-page content.
 
-**Integration surface summary (for Fable):**
+**Integration surface summary (unchanged from Session 14, still valid for any new provider):**
 
 | File | What to change |
 |------|---------------|
-| `claim_verifier/nodes/retrieve_evidence.py` | Add `SearchProviders.claude()` method + `"claude"` case in `_search_query()` dispatch |
-| `config.toml` | Add `search_provider = "claude"` option |
-| `utils/cost_tracking.py` | Add `"claude"` to cost estimates (or $0) |
-| `utils/settings.py` | Add Claude/Anthropic API key validation if needed |
-| `pyproject.toml` | Add `anthropic` SDK dependency if not already present |
+| `claim_verifier/nodes/retrieve_evidence.py` | Add `SearchProviders.pixserp()` method + `"pixserp"` case in `_search_query()` dispatch |
+| `config.toml` | Add `search_provider = "pixserp"` option |
+| `utils/cost_tracking.py` | Add `"pixserp"` to cost estimates ($0.0015–0.0035/call) |
+| `utils/settings.py` | Add `PIXSERP_API_KEY` field (pxs_ prefix, 40 hex chars) |
+| `.env.example` | Already done (Session 15) |
 
-**No changes needed:** query generation, evidence summarization, evaluation, routing/cascade, gap report, triage — all provider-agnostic.
+**No changes needed downstream:** query generation, evidence summarization, evaluation, routing/cascade, gap report, triage — all provider-agnostic. But read `docs/playbook/query-design.md` — the query generation prompt (`QUERY_GENERATION_INITIAL_SYSTEM_PROMPT`) currently biases toward leading/keyword queries; revising it to open factual form would improve all providers.
 
-**Docs to update after implementation:** `CLAUDE.md` (provider convention), `docs/websearch-and-costs.md` (cost section), `docs/llm-providers.md` (if relevant), `README.md` (search provider list).
+**Key docs produced this session:**
+- `project-management/phase-plan-notes/phase-06/phase-06-search-provider-decision.md` — full decision record, market scan, PixSerp test results (5-claim + 27-call matrix), deferred two-stage design, work items
+- `docs/websearch-and-costs.md` — PixSerp section added (pricing tiers, live test data, content depth comparison, integration assessment)
+- `docs/playbook/query-design.md` — new playbook: claim-to-query transformation, verification bias, three query shapes
 
 **Critical config notes for heavy runs:**
 - `--vault` path must be the vault ROOT (`vault-main`), NOT `vault-main/v-research` — `load_vault()` appends `v-research` internally. Wrong path silently produces zero vault notes.
 - `--argument-pyramid` value must be `un-ukraine-russia-war-votes-working-paper` for the real vault.
 - Real-vault command (4 corpus papers): `poetry run python scripts/run_heavy.py workspace/inbox/ukraine-intro-cited-test.md --vault "PATH/vault-main" --argument-pyramid un-ukraine-russia-war-votes-working-paper --corpus-ids d_o3qBk5fESO_q,d_7ZUo22uPGdsf,d_7lRaRsrtAJOW,d_ZikkNbPZFWWV`
 
-**Phase plans:** `phase-02` through `phase-05` all COMPLETE. Phase 06 plan to be written by Fable (incoming session).
+**Phase plans:** `phase-02` through `phase-05` all COMPLETE. Phase 06 DEFERRED — decision record at `project-management/phase-plan-notes/phase-06/phase-06-search-provider-decision.md` (no implementation plan yet).
 
 ---
 
@@ -81,7 +85,7 @@ Agent packages at root: `claim_extractor/`, `claim_verifier/`, `fact_checker/`, 
 
 ### API keys configured (.env at repo root)
 
-All present: `OPENAI_API_KEY` (sk-proj-, topped up Session 10), `EXA_API_KEY` (UUID, verified live), `OPENROUTER_API_KEY` (sk-or-v1, verified live), `TAVILY_API_KEY` (tvly-dev-, verified live), `REDIS_URI` + `REDIS_URL` (both redis://localhost:6379, Redis optional for local dev), `RAG_API_KEY` (64-char hex, provisioned Session 9, verified live).
+All present: `OPENAI_API_KEY` (sk-proj-, topped up Session 10), `EXA_API_KEY` (UUID, verified live), `OPENROUTER_API_KEY` (sk-or-v1, verified live), `TAVILY_API_KEY` (tvly-dev-, verified live), `REDIS_URI` + `REDIS_URL` (both redis://localhost:6379, Redis optional for local dev), `RAG_API_KEY` (64-char hex, provisioned Session 9, verified live), `PIXSERP_API_KEY` (pxs_, added Session 15, verified live — 32 API calls made).
 
 ### Model tier mapping (current, from config.toml)
 
@@ -214,3 +218,4 @@ Note: 4 dead document shells from Session 9's failed ingestion + 2 ArXiv test do
 | 2026-07-25 | Session 12: Phase 05 CLOSED. D10 support-confirmation amendment, alias-based note resolution, conflict-demo fixture, source-conflict demonstrated live. Cited-file corpus-scoping run. Cost doc updated. Exa credits exhausted (hard-cap confirmed). 488 tests. |
 | 2026-07-25 | Session 13: Backlog maintenance — 4 fixes (zero-evidence verdicts, web-call counter, triage importance recalibration + core-data carve-out, Zeng 2026 corpus ID). 32 new tests, 523 total. Backlog clear for Phase 06. |
 | 2026-07-25 | Session 14: Phase 06 prep — comparator set (5 claims × Exa/Tavily), integration surface mapping, evaluation metrics (speed/quality/cost), Fable + goal-loop orchestration approach. Exa confirmed dead (402 ×5). One new doc. |
+| 2026-07-25 | Session 15: Phase 06 re-scoped and DEFERRED. Claude-native direction rejected (D60). Market scan (7 providers). PixSerp discovered, evaluated (32 live API calls across tiers/prompts). Query-design playbook written. crawl4ai service explored and documented. Cross-repo updates (control-hub IDEA note, web-interaction skill). No code changes. |
