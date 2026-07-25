@@ -21,7 +21,11 @@ from typing import Any, Dict, List
 from claim_verifier.schemas import VerificationResult
 from ingest.routing import (
     NEVER_WEB_CLASSES,
+    NORM_REFUTE,
+    NORM_SUPPORT,
     SKIP_TRIVIAL,
+    UNVERIFIABLE,
+    normalize_verdict,
     route_name_from_decision,
 )
 from utils.claim_record import (
@@ -33,6 +37,78 @@ from utils.claim_record import (
 from utils.run_config import ResourceManifest
 
 # ---------------------------------------------------------------------------
+# Lineage groups (TG 05.4)
+# ---------------------------------------------------------------------------
+#
+# "Shared" lineage routes ultimately trace back to the same underlying
+# corpus the author curated (vault notes, or the author's own ingested
+# paper corpus) -- they are not independent of each other or of the
+# author's judgment. "web" is the only independent-lineage route: it
+# checks the claim against sources the author didn't select.
+
+SHARED_LINEAGE_ROUTES = frozenset({"vault_aligned", "vault_matched", "corpus"})
+VAULT_ROUTES = frozenset({"vault_aligned", "vault_matched"})
+WEB_ROUTE = "web"
+CORPUS_ROUTE = "corpus"
+
+SOURCE_CONFLICT = "source-conflict"
+VAULT_CORPUS_CHECK_NEEDED = "vault-corpus-check-needed"
+
+
+def _normalized_verdicts_for_routes(record: ClaimRecord, routes: frozenset) -> List[str]:
+    return [
+        normalize_verdict(rv.verdict) for rv in record.route_verdicts if rv.route in routes
+    ]
+
+
+def _opposing(a: List[str], b: List[str]) -> bool:
+    """Whether `a` and `b` disagree: one side supports, the other refutes.
+
+    Silent/unknown normalized verdicts never count toward either side, so
+    an empty or all-silent group can never trigger a conflict.
+    """
+    a_support, a_refute = NORM_SUPPORT in a, NORM_REFUTE in a
+    b_support, b_refute = NORM_SUPPORT in b, NORM_REFUTE in b
+    return (a_support and b_refute) or (a_refute and b_support)
+
+
+def detect_conflicts(records: List[ClaimRecord]) -> List[ClaimRecord]:
+    """Detect support-vs-refute disagreements between evidence tiers.
+
+    Pure, synchronous, LLM-free. Sets ``conflict_flags`` on each record.
+
+    Two flags:
+        - ``"source-conflict"`` -- a web verdict disagrees (support vs.
+          refute) with a vault or corpus verdict. The highest-value
+          finding: an independent check contradicts the author's own
+          source.
+        - ``"vault-corpus-check-needed"`` -- a vault verdict disagrees
+          with a corpus verdict. Both are shared-lineage (the author's own
+          materials), so this is a "re-read the source" signal rather
+          than an independent contradiction.
+
+    Only clear support-vs-refute disagreement triggers a flag; silent or
+    unrecognized verdicts never do (`normalize_verdict` maps both to
+    "silent"). Modifies and returns ``records`` in place.
+    """
+    for record in records:
+        shared_verdicts = _normalized_verdicts_for_routes(record, SHARED_LINEAGE_ROUTES)
+        web_verdicts = _normalized_verdicts_for_routes(record, frozenset({WEB_ROUTE}))
+        vault_verdicts = _normalized_verdicts_for_routes(record, VAULT_ROUTES)
+        corpus_verdicts = _normalized_verdicts_for_routes(record, frozenset({CORPUS_ROUTE}))
+
+        flags: List[str] = []
+        if _opposing(shared_verdicts, web_verdicts):
+            flags.append(SOURCE_CONFLICT)
+        if _opposing(vault_verdicts, corpus_verdicts):
+            flags.append(VAULT_CORPUS_CHECK_NEEDED)
+
+        record.conflict_flags = flags
+
+    return records
+
+
+# ---------------------------------------------------------------------------
 # assign_suggested_actions
 # ---------------------------------------------------------------------------
 
@@ -41,17 +117,25 @@ def assign_suggested_actions(records: List[ClaimRecord]) -> List[ClaimRecord]:
     """Compute and set ``suggested_action`` on every record, in place.
 
     Priority order (first match wins):
-        1. Any vault verdict is ``vault_contradicted`` -> ``REVISE_CLAIM``.
-        2. Cited claim with a ``not_supported`` vault verdict (miscite)
+        1. ``"source-conflict"`` in ``conflict_flags`` -> ``REVISE_CLAIM``.
+           A cross-tier disagreement outranks any individual verdict --
+           run ``detect_conflicts`` before this function for the flag to
+           be populated.
+        2. Any vault verdict is ``vault_contradicted`` -> ``REVISE_CLAIM``.
+        3. Cited claim with a ``not_supported`` vault verdict (miscite)
            -> ``FIX_CITATION``.
-        3. Any vault verdict is ``vault_supported`` -> ``NONE``.
-        4. Web-supported but no vault support -> ``ADD_VAULT_NOTE`` (vault
+        4. Any vault verdict is ``vault_supported`` -> ``NONE``.
+        5. Web-supported but no vault support -> ``ADD_VAULT_NOTE`` (vault
            improvement signal).
-        5. Citation-free claim with no vault match -> ``ADD_CITATION``.
-        6. Otherwise -> ``UNRESOLVED``.
+        6. Citation-free claim with no vault match -> ``ADD_CITATION``.
+        7. Otherwise -> ``UNRESOLVED``.
     """
     for record in records:
         route_verdicts = record.route_verdicts
+
+        if SOURCE_CONFLICT in record.conflict_flags:
+            record.suggested_action = SuggestedAction.REVISE_CLAIM
+            continue
 
         if any(
             rv.verdict == VaultVerdict.VAULT_CONTRADICTED.value
@@ -210,8 +294,32 @@ def _render_web_verdict(record: ClaimRecord) -> str:
     return f"**Web verdict:** {record.web_verdict.result.value} — sources: {sources}"
 
 
+def _is_single_lineage(record: ClaimRecord) -> bool:
+    """Whether this claim's only verdicts come from shared lineage (D8).
+
+    True when every route that produced a verdict is vault/corpus (never
+    web), at least one such route exists, and the claim wasn't skipped as
+    trivial or left unverifiable -- in both of those cases there's no
+    "independent check that didn't happen" story worth flagging. Not a
+    stored field: derived at render time from ``route_verdicts``.
+    """
+    routes = {rv.route for rv in record.route_verdicts}
+    if not routes or WEB_ROUTE in routes:
+        return False
+    if not routes & SHARED_LINEAGE_ROUTES:
+        return False
+    if record.triage_class == "trivial":
+        return False
+    if record.routing_decision == UNVERIFIABLE:
+        return False
+    return True
+
+
 def _render_route_verdicts(record: ClaimRecord) -> List[str]:
-    lines = ["**Route verdicts:**"]
+    header = "**Route verdicts:**"
+    if _is_single_lineage(record):
+        header += " (single-lineage)"
+    lines = [header]
     if not record.route_verdicts:
         lines.append("- (no route verdicts)")
         return lines
@@ -221,6 +329,30 @@ def _render_route_verdicts(record: ClaimRecord) -> List[str]:
         lines.append(
             f"- [{rv.route}] {rv.verdict} — provenance: {provenance} — {reasoning}"
         )
+    return lines
+
+
+def _render_source_conflict(record: ClaimRecord) -> List[str]:
+    """Side-by-side provenance for a source-conflict claim (D7).
+
+    Emits nothing unless ``"source-conflict"`` is in ``conflict_flags``
+    (run ``detect_conflicts`` first) -- purely additive to the claim
+    detail section otherwise.
+    """
+    if SOURCE_CONFLICT not in record.conflict_flags:
+        return []
+
+    lines = ["**Source conflict:** independent web check disagrees with shared-lineage evidence"]
+    for rv in record.route_verdicts:
+        if rv.route not in SHARED_LINEAGE_ROUTES:
+            continue
+        provenance = rv.provenance or "no provenance"
+        lines.append(f"- [{rv.route}] {rv.verdict} — {provenance}")
+    for rv in record.route_verdicts:
+        if rv.route != WEB_ROUTE:
+            continue
+        provenance = rv.provenance or "no provenance"
+        lines.append(f"- [web] {rv.verdict} — {provenance}")
     return lines
 
 
@@ -257,6 +389,7 @@ def _render_claims(records: List[ClaimRecord], has_vault: bool) -> List[str]:
         lines.append(_render_web_verdict(record))
         if has_vault:
             lines.extend(_render_route_verdicts(record))
+            lines.extend(_render_source_conflict(record))
         lines.append(f"**Suggested action:** {_action_label(action)}")
         lines.append("")
         lines.append("---")
@@ -310,6 +443,31 @@ def _render_vault_signals(records: List[ClaimRecord]) -> List[str]:
             lines.append(
                 "- Notes matched outside the paper filter — consider adding "
                 f"`argument_pyramid` tag: {note} (matched claim #{index})"
+            )
+    else:
+        lines.append("- None")
+    lines.append("")
+
+    lines.append("### Vault/corpus verdict mismatches")
+    lines.append("")
+    mismatches = [
+        (index, record)
+        for index, record in enumerate(records, start=1)
+        if VAULT_CORPUS_CHECK_NEEDED in record.conflict_flags
+    ]
+    if mismatches:
+        for index, record in mismatches:
+            vault_rv = next(
+                (rv for rv in record.route_verdicts if rv.route in VAULT_ROUTES), None
+            )
+            corpus_rv = next(
+                (rv for rv in record.route_verdicts if rv.route == CORPUS_ROUTE), None
+            )
+            vault_verdict = vault_rv.verdict if vault_rv else "unknown"
+            corpus_verdict = corpus_rv.verdict if corpus_rv else "unknown"
+            lines.append(
+                f"- Claim #{index}: vault says {vault_verdict}, corpus says "
+                f"{corpus_verdict} — re-read the source against your note."
             )
     else:
         lines.append("- None")

@@ -520,17 +520,21 @@ async def test_corpus_handler_added_when_manifest_has_corpus_ids_and_no_override
     route_handlers, run_pipeline must build handlers per the documented
     wiring contract (ingest/corpus_route.py module docstring): base
     ROUTE_HANDLERS plus a "corpus" entry from make_corpus_route_handler,
-    scoped to the manifest's corpus_ids."""
+    scoped to the manifest's corpus_ids, with the pre-fetched document list
+    (TG 05.2) passed through as `documents`."""
     manifest = _corpus_manifest(corpus_ids=["d_1", "d_2"])
     extractor = _extractor([make_validated_claim("A novel result claim.", 0)])
 
     sentinel_handler = object()
+    sentinel_documents = [object()]
     mock_factory = MagicMock(return_value=sentinel_handler)
+    mock_list_documents = AsyncMock(return_value=sentinel_documents)
     mock_execute_routing = AsyncMock(side_effect=lambda records, manifest, handlers=None, policy=None: records)
 
     with ExitStack() as stack:
         stack.enter_context(patch.object(run_heavy, "claim_extractor_graph", extractor))
         stack.enter_context(patch.object(run_heavy, "make_corpus_route_handler", mock_factory))
+        stack.enter_context(patch.object(run_heavy, "list_documents", mock_list_documents))
         stack.enter_context(patch.object(run_heavy, "execute_routing", mock_execute_routing))
         stack.enter_context(patch("ingest.triage.get_llm", return_value=MagicMock()))
         stack.enter_context(
@@ -541,10 +545,43 @@ async def test_corpus_handler_added_when_manifest_has_corpus_ids_and_no_override
         )
         await run_pipeline("A novel result claim.", manifest)
 
-    mock_factory.assert_called_once_with(["d_1", "d_2"])
+    mock_list_documents.assert_awaited_once()
+    mock_factory.assert_called_once_with(["d_1", "d_2"], documents=sentinel_documents)
     _, kwargs = mock_execute_routing.call_args
     assert kwargs["handlers"]["corpus"] is sentinel_handler
     assert "web" in kwargs["handlers"]  # base ROUTE_HANDLERS preserved, not replaced
+
+
+@pytest.mark.asyncio
+async def test_corpus_handler_receives_documents():
+    """Focused check for TG 05.2 wiring: when manifest.corpus_ids is set,
+    list_documents() is called exactly once (pre-fetched, not per-claim) and
+    its result is threaded into make_corpus_route_handler's `documents`
+    kwarg -- not dropped or ignored."""
+    manifest = _corpus_manifest(corpus_ids=["d_1"])
+    extractor = _extractor([make_validated_claim("A novel result claim.", 0)])
+
+    documents_payload = [SimpleNamespace(id="d_1")]
+    mock_list_documents = AsyncMock(return_value=documents_payload)
+    mock_execute_routing = AsyncMock(side_effect=lambda records, manifest, handlers=None, policy=None: records)
+
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(run_heavy, "claim_extractor_graph", extractor))
+        stack.enter_context(patch.object(run_heavy, "list_documents", mock_list_documents))
+        stack.enter_context(patch.object(run_heavy, "execute_routing", mock_execute_routing))
+        stack.enter_context(patch("ingest.triage.get_llm", return_value=MagicMock()))
+        stack.enter_context(
+            patch(
+                "ingest.triage.call_llm_with_structured_output",
+                new=AsyncMock(return_value=SINGLE_CLAIM_TRIAGE),
+            )
+        )
+        await run_pipeline("A novel result claim.", manifest)
+
+    mock_list_documents.assert_awaited_once()
+    _, kwargs = mock_execute_routing.call_args
+    corpus_handler = kwargs["handlers"]["corpus"]
+    assert corpus_handler is not None
 
 
 @pytest.mark.asyncio

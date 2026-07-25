@@ -13,6 +13,7 @@ from pathlib import Path
 from claim_verifier.schemas import Verdict, VerificationResult
 from ingest.gap_report import (
     assign_suggested_actions,
+    detect_conflicts,
     render_gap_report,
     serialize_results,
 )
@@ -54,6 +55,17 @@ def make_record(
         citation_status=citation_status,
         position=DraftPosition(sentence_index=0),
         route_verdicts=route_verdicts or [],
+    )
+
+
+def make_conflict_record(route_verdicts, conflict_flags=None):
+    """Bare record for detect_conflicts tests: no web_verdict noise, just
+    the route_verdicts list detect_conflicts actually reads."""
+    return ClaimRecord(
+        citation_status=CitationStatus.CITATION_FREE,
+        position=DraftPosition(sentence_index=0),
+        route_verdicts=route_verdicts,
+        conflict_flags=conflict_flags or [],
     )
 
 
@@ -172,6 +184,160 @@ def test_action_contradicted_overrides_supported():
     result = assign_suggested_actions([record])
 
     assert result[0].suggested_action == SuggestedAction.REVISE_CLAIM
+
+
+def test_source_conflict_outranks_individual_verdicts():
+    """A source-conflict flag must win REVISE_CLAIM even when the vault
+    verdict alone (vault_supported) would otherwise resolve to NONE."""
+    record = make_conflict_record(
+        [
+            RouteVerdict(
+                route="vault_aligned", verdict="vault_supported", provenance="NOTE-h"
+            )
+        ],
+        conflict_flags=["source-conflict"],
+    )
+
+    result = assign_suggested_actions([record])
+
+    assert result[0].suggested_action == SuggestedAction.REVISE_CLAIM
+
+
+# ---------------------------------------------------------------------------
+# detect_conflicts
+# ---------------------------------------------------------------------------
+
+
+def test_source_conflict_web_refutes_vault_supports():
+    record = make_conflict_record(
+        [
+            RouteVerdict(
+                route="vault_aligned", verdict="vault_supported", provenance="NOTE-a"
+            ),
+            RouteVerdict(
+                route="web", verdict="Refuted", provenance="https://example.com/a"
+            ),
+        ]
+    )
+
+    detect_conflicts([record])
+
+    assert record.conflict_flags == ["source-conflict"]
+
+
+def test_source_conflict_web_supports_vault_refutes():
+    record = make_conflict_record(
+        [
+            RouteVerdict(
+                route="vault_aligned", verdict="vault_contradicted", provenance="NOTE-b"
+            ),
+            RouteVerdict(
+                route="web", verdict="Supported", provenance="https://example.com/b"
+            ),
+        ]
+    )
+
+    detect_conflicts([record])
+
+    assert record.conflict_flags == ["source-conflict"]
+
+
+def test_vault_corpus_check_needed():
+    record = make_conflict_record(
+        [
+            RouteVerdict(
+                route="vault_aligned", verdict="vault_supported", provenance="NOTE-c"
+            ),
+            RouteVerdict(
+                route="corpus", verdict="corpus_contradicted", provenance="doc-1"
+            ),
+        ]
+    )
+
+    detect_conflicts([record])
+
+    assert record.conflict_flags == ["vault-corpus-check-needed"]
+
+
+def test_both_flags_possible():
+    record = make_conflict_record(
+        [
+            RouteVerdict(
+                route="vault_aligned", verdict="vault_supported", provenance="NOTE-d"
+            ),
+            RouteVerdict(
+                route="corpus", verdict="corpus_contradicted", provenance="doc-2"
+            ),
+            RouteVerdict(
+                route="web", verdict="Refuted", provenance="https://example.com/d"
+            ),
+        ]
+    )
+
+    detect_conflicts([record])
+
+    assert set(record.conflict_flags) == {"source-conflict", "vault-corpus-check-needed"}
+
+
+def test_silent_never_triggers_flag():
+    record = make_conflict_record(
+        [
+            RouteVerdict(
+                route="vault_aligned", verdict="vault_supported", provenance="NOTE-e"
+            ),
+            RouteVerdict(
+                route="corpus", verdict="corpus_insufficient", provenance="doc-3"
+            ),
+        ]
+    )
+
+    detect_conflicts([record])
+
+    assert record.conflict_flags == []
+
+
+def test_no_conflict_all_support():
+    record = make_conflict_record(
+        [
+            RouteVerdict(
+                route="vault_aligned", verdict="vault_supported", provenance="NOTE-f"
+            ),
+            RouteVerdict(
+                route="web", verdict="Supported", provenance="https://example.com/f"
+            ),
+        ]
+    )
+
+    detect_conflicts([record])
+
+    assert record.conflict_flags == []
+
+
+def test_no_verdicts_no_flags():
+    record = make_conflict_record([])
+
+    detect_conflicts([record])
+
+    assert record.conflict_flags == []
+
+
+def test_unknown_verdict_treated_as_silent():
+    record = make_conflict_record(
+        [
+            RouteVerdict(
+                route="vault_aligned", verdict="vault_supported", provenance="NOTE-g"
+            ),
+            RouteVerdict(
+                route="web",
+                verdict="some_unrecognized_value",
+                provenance="https://example.com/g",
+            ),
+        ]
+    )
+
+    detect_conflicts([record])
+
+    assert record.conflict_flags == []
 
 
 # ---------------------------------------------------------------------------
@@ -413,6 +579,96 @@ def test_report_escapes_pipes():
 
     assert "a | pipe" not in report
     assert "a \\| pipe" in report
+
+
+def test_source_conflict_rendered_in_claim_detail():
+    record = make_record(
+        "Conflicted claim.",
+        citation_status=CitationStatus.CITED,
+        route_verdicts=[
+            RouteVerdict(
+                route="vault_aligned",
+                verdict="vault_supported",
+                provenance="NOTE-conflict",
+            ),
+            RouteVerdict(
+                route="web",
+                verdict="Refuted",
+                provenance="https://example.com/conflict",
+            ),
+        ],
+        web_result=VerificationResult.REFUTED,
+    )
+    detect_conflicts([record])
+    assign_suggested_actions([record])
+    manifest = ResourceManifest(draft_path=Path("draft.md"), vault_path=Path("vault"))
+
+    report = render_gap_report([record], manifest)
+
+    assert "Source conflict" in report or "source-conflict" in report.lower()
+    assert "NOTE-conflict" in report
+    assert "https://example.com/conflict" in report
+
+
+def test_vault_corpus_check_in_improvement_signals():
+    record = make_record(
+        "Mismatched claim.",
+        citation_status=CitationStatus.CITED,
+        route_verdicts=[
+            RouteVerdict(
+                route="vault_aligned",
+                verdict="vault_supported",
+                provenance="NOTE-mismatch",
+            ),
+            RouteVerdict(
+                route="corpus", verdict="corpus_contradicted", provenance="doc-mismatch"
+            ),
+        ],
+    )
+    detect_conflicts([record])
+    assign_suggested_actions([record])
+    manifest = ResourceManifest(draft_path=Path("draft.md"), vault_path=Path("vault"))
+
+    report = render_gap_report([record], manifest)
+
+    assert "## Vault Improvement Signals" in report
+    assert "vault says vault_supported" in report
+    assert "corpus says corpus_contradicted" in report
+    assert "re-read the source against your note" in report
+
+
+def test_single_lineage_annotation():
+    record = make_record(
+        "Vault-only resolved claim.",
+        citation_status=CitationStatus.CITED,
+        route_verdicts=[
+            RouteVerdict(
+                route="vault_aligned", verdict="vault_supported", provenance="NOTE-solo"
+            ),
+        ],
+    )
+    detect_conflicts([record])
+    assign_suggested_actions([record])
+    manifest = ResourceManifest(draft_path=Path("draft.md"), vault_path=Path("vault"))
+
+    report = render_gap_report([record], manifest)
+
+    assert "(single-lineage)" in report
+
+
+def test_light_profile_unchanged():
+    """No vault, no corpus -> report unchanged (no new conflict/single-lineage
+    sections), matching Phase 01's report format exactly."""
+    record = make_record("A claim without a vault.", citation_status=CitationStatus.CITATION_FREE)
+    detect_conflicts([record])
+    assign_suggested_actions([record])
+    manifest = ResourceManifest(draft_path=Path("draft.md"))
+
+    report = render_gap_report([record], manifest)
+
+    assert "source-conflict" not in report.lower()
+    assert "single-lineage" not in report
+    assert "Vault Improvement Signals" not in report
 
 
 # ---------------------------------------------------------------------------

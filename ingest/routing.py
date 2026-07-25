@@ -33,7 +33,7 @@ from typing import Awaitable, Callable, Dict, List, Optional, Protocol
 
 from pydantic import BaseModel, Field
 
-from utils.claim_record import ClaimRecord, RouteVerdict, VaultVerdict
+from utils.claim_record import CitationStatus, ClaimRecord, RouteVerdict, VaultVerdict
 from utils.run_config import ResourceManifest
 
 logger = logging.getLogger(__name__)
@@ -50,6 +50,57 @@ MAX_CONCURRENT_ROUTES = 5
 RESOLVED = "resolved"
 SKIP_TRIVIAL = "skip-trivial"
 UNVERIFIABLE = "unverifiable-by-available-routes"
+
+# ---------------------------------------------------------------------------
+# Normalized verdict vocabulary (TG 05.1)
+# ---------------------------------------------------------------------------
+
+NORM_SUPPORT = "support"
+NORM_REFUTE = "refute"
+NORM_SILENT = "silent"
+
+_VERDICT_MAP: Dict[str, str] = {
+    # Vault verdicts
+    "vault_supported": NORM_SUPPORT,
+    "vault_contradicted": NORM_REFUTE,
+    "not_supported": NORM_SILENT,
+    "no_vault_match": NORM_SILENT,
+    "note_not_in_vault": NORM_SILENT,
+    "insufficient_vault_content": NORM_SILENT,
+    # Corpus verdicts
+    "corpus_supported": NORM_SUPPORT,
+    "corpus_contradicted": NORM_REFUTE,
+    "corpus_insufficient": NORM_SILENT,
+    "no_corpus_hits": NORM_SILENT,
+    # Web verdicts (VerificationResult values)
+    "Supported": NORM_SUPPORT,
+    "Refuted": NORM_REFUTE,
+    "Insufficient Information": NORM_SILENT,
+    "Conflicting Evidence": NORM_SILENT,
+    # Synthetic (cascade infrastructure)
+    "handler_error": NORM_SILENT,
+}
+
+
+def normalize_verdict(verdict: str) -> str:
+    """Normalize a route verdict to 'support', 'refute', or 'silent'.
+
+    Used by cascade logic (escalate on silent) and conflict detection (TG 05.4).
+    Unknown/unrecognized values map to 'silent' (never crash).
+    """
+    return _VERDICT_MAP.get(verdict, NORM_SILENT)
+
+
+def _is_cascade_silent(verdict: str) -> bool:
+    """Whether a verdict should trigger cascade escalation.
+
+    Only verdicts *explicitly mapped* to ``NORM_SILENT`` trigger cascade.
+    Unknown/extension-route verdicts (not in ``_VERDICT_MAP``) are treated
+    as decisive -- the handler returned a result we simply don't categorize,
+    and escalating would break extensibility (a custom route's custom verdict
+    would wrongly cascade).
+    """
+    return _VERDICT_MAP.get(verdict) == NORM_SILENT
 
 
 def route_decision(route: str) -> str:
@@ -161,11 +212,11 @@ POLICY: List[PolicyRow] = [
         name="general",
         condition=(
             "Otherwise (general-factual, academic-citable, or unclassified/None -- "
-            "ties break toward verifying, never toward skipping) -> route to web if "
-            "available and not already attempted; else unverifiable."
+            "ties break toward verifying, never toward skipping) -> try corpus "
+            "first (when declared), then web if corpus is silent or unavailable."
         ),
         applies=_catch_all,
-        candidate_routes=("web",),
+        candidate_routes=("corpus", "web"),
     ),
 ]
 
@@ -353,6 +404,9 @@ ROUTE_HANDLERS["web"] = web_route_handler
 # ---------------------------------------------------------------------------
 
 
+MAX_CASCADE_ROUNDS = 3
+
+
 async def execute_routing(
     records: List[ClaimRecord],
     manifest: ResourceManifest,
@@ -368,51 +422,241 @@ async def execute_routing(
     `routing_reason` rather than aborting the batch -- one claim's failure
     must not stop the run. Modifies and returns `records` in place.
 
-    `decide_route` is applied to every record sequentially first -- it's a
-    pure, fast, synchronous decision, and every record (including ones that
-    don't need a handler: resolved, skip-trivial, unverifiable) must have its
-    `routing_decision`/`routing_reason` set before any handler runs. Only the
-    actual handler invocations -- the slow, network-bound part -- are then
-    dispatched concurrently, bounded by `MAX_CONCURRENT_ROUTES` so we don't
-    fire an unbounded burst of API calls at once.
+    **Cascade (TG 05.1):** After each concurrent dispatch round, records
+    whose handler returned a *silent* verdict (or no verdict / exception)
+    are re-routed via ``decide_route``. Because ``_already_routed`` checks
+    existing ``route_verdicts``, the just-attempted route is skipped and
+    the next candidate is selected automatically. The cascade repeats for
+    up to ``MAX_CASCADE_ROUNDS`` rounds (safety bound).
     """
     active_handlers = handlers if handlers is not None else ROUTE_HANDLERS
     available_routes = manifest.available_routes
 
-    to_dispatch: List[tuple] = []
+    # Phase 1: initial routing decisions for ALL records
     for record in records:
         result = decide_route(record, available_routes, policy=policy)
         record.routing_decision = result.decision
         record.routing_reason = result.reason
 
-        route = route_name_from_decision(result.decision)
-        if route is None:
-            continue
+    # Phase 2: cascade loop
+    for _round in range(MAX_CASCADE_ROUNDS):
+        # Collect records that need dispatch this round
+        to_dispatch: List[tuple] = []
+        for record in records:
+            route = route_name_from_decision(record.routing_decision)
+            if route is None:
+                continue
 
-        handler = active_handlers.get(route)
-        if handler is None:
-            record.routing_reason = (
-                f"{result.reason} (no handler registered for route '{route}')"
-            )
-            continue
+            if _already_routed(record, route):
+                continue
 
-        to_dispatch.append((record, handler, route, result.reason))
+            handler = active_handlers.get(route)
+            if handler is None:
+                old_reason = record.routing_reason
+                record.routing_reason = (
+                    f"{old_reason} (no handler registered for route '{route}')"
+                )
+                # Re-decide: treat missing handler like a silent verdict so
+                # the next candidate route (if any) is tried.
+                _redecide(record, available_routes, policy)
+                continue
 
-    if not to_dispatch:
+            to_dispatch.append((record, handler, route))
+
+        if not to_dispatch:
+            break
+
+        # Snapshot which route each dispatched record is attempting, and
+        # how many route_verdicts it has before the handler runs.
+        pre_counts = {id(r): len(r.route_verdicts) for r, _, _ in to_dispatch}
+        dispatched_routes = {id(r): rt for r, _, rt in to_dispatch}
+
+        # Dispatch concurrently
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT_ROUTES)
+
+        async def _run_handler(
+            rec: ClaimRecord, hdlr: RouteHandler, rt: str,
+        ) -> None:
+            async with semaphore:
+                try:
+                    await hdlr(rec)
+                except Exception as exc:  # noqa: BLE001
+                    rec.routing_reason = f"{rec.routing_reason} (handler error: {exc})"
+                    logger.exception(
+                        "execute_routing: handler for route '%s' failed", rt,
+                    )
+                    # Record a synthetic failed verdict so _already_routed
+                    # skips this route on cascade re-decide.
+                    rec.route_verdicts.append(
+                        RouteVerdict(
+                            route=rt,
+                            verdict="handler_error",
+                            reasoning=f"Handler raised: {exc}",
+                        )
+                    )
+
+        await asyncio.gather(
+            *[_run_handler(r, h, rt) for r, h, rt in to_dispatch],
+        )
+
+        # Check for silent / missing verdicts -> re-decide for next round
+        needs_escalation = False
+        for record in records:
+            rec_id = id(record)
+            if rec_id not in dispatched_routes:
+                continue
+
+            attempted_route = dispatched_routes[rec_id]
+            pre_count = pre_counts[rec_id]
+
+            # Determine if the handler produced a decisive (non-silent) verdict
+            # for the route it was dispatched to.
+            new_verdicts = record.route_verdicts[pre_count:]
+            route_verdict_added = [
+                rv for rv in new_verdicts if rv.route == attempted_route
+            ]
+
+            if route_verdict_added:
+                latest = route_verdict_added[-1]
+                if not _is_cascade_silent(latest.verdict):
+                    # Decisive result -- update routing_decision to reflect
+                    # the route that actually resolved the claim.
+                    record.routing_decision = route_decision(attempted_route)
+                    continue
+            else:
+                # Handler returned without appending a verdict for this
+                # route (returned None, or populated a different route).
+                # Record a synthetic verdict so _already_routed skips
+                # this route on cascade re-decide.
+                record.route_verdicts.append(
+                    RouteVerdict(
+                        route=attempted_route,
+                        verdict="handler_error",
+                        reasoning="Handler returned no verdict",
+                    )
+                )
+
+            # Silent, no verdict, or handler error -- escalate
+            if _redecide(record, available_routes, policy):
+                needs_escalation = True
+
+        if not needs_escalation:
+            break
+
+    return records
+
+
+def _redecide(
+    record: ClaimRecord,
+    available_routes: List[str],
+    policy: Optional[List[PolicyRow]],
+) -> bool:
+    """Re-run ``decide_route`` for cascade escalation.
+
+    Updates ``routing_decision`` and appends cascade context to
+    ``routing_reason``. Returns True if the new decision is a route
+    (meaning another dispatch round is needed).
+    """
+    old_reason = record.routing_reason or ""
+    result = decide_route(record, available_routes, policy=policy)
+    record.routing_decision = result.decision
+    record.routing_reason = f"{old_reason}; cascade: {result.reason}"
+    return route_name_from_decision(result.decision) is not None
+
+
+# ---------------------------------------------------------------------------
+# Importance-gated cross-checks (TG 05.3)
+# ---------------------------------------------------------------------------
+
+CROSS_CHECK_IMPORTANCE_THRESHOLD = 4
+
+
+def _needs_d4(record: ClaimRecord) -> bool:
+    """D4: vault-resolved, cited, importance >= threshold, corpus not yet attempted."""
+    if (record.importance or 0) < CROSS_CHECK_IMPORTANCE_THRESHOLD:
+        return False
+    if record.citation_status != CitationStatus.CITED or not record.cite_set:
+        return False
+    if not any(
+        rv.verdict
+        in (VaultVerdict.VAULT_SUPPORTED.value, VaultVerdict.VAULT_CONTRADICTED.value)
+        for rv in record.route_verdicts
+    ):
+        return False
+    if _already_routed(record, "corpus"):
+        return False
+    return True
+
+
+def _needs_d5(record: ClaimRecord) -> bool:
+    """D5: single-lineage refutation, importance >= threshold, web-eligible, web not yet attempted."""
+    if (record.importance or 0) < CROSS_CHECK_IMPORTANCE_THRESHOLD:
+        return False
+    if record.triage_class in NEVER_WEB_CLASSES:
+        return False
+    if _already_routed(record, "web"):
+        return False
+    has_refute = any(
+        normalize_verdict(rv.verdict) == NORM_REFUTE for rv in record.route_verdicts
+    )
+    if not has_refute:
+        return False
+    has_support = any(
+        normalize_verdict(rv.verdict) == NORM_SUPPORT for rv in record.route_verdicts
+    )
+    if has_support:
+        return False
+    return True
+
+
+async def apply_cross_checks(
+    records: List[ClaimRecord],
+    manifest: ResourceManifest,
+    handlers: Dict[str, RouteHandler],
+) -> List[ClaimRecord]:
+    """Apply importance-gated cross-checks (D4, D5) after cascade routing.
+
+    D4 — Attribution check: vault-resolved + cited + importance >= 4 +
+    corpus handler available → scoped corpus check (does the source
+    actually say this?).
+
+    D5 — Refutation confirmation: single-tier refutation + importance >= 4
+    + web-eligible → one web check for independent confirmation.
+    Never-web claims are left as single-lineage.
+
+    Supports NEVER trigger cross-checks (cost guardrail).
+    Modifies and returns ``records`` in place.
+    """
+    d4_dispatch: List[tuple] = []
+    d5_dispatch: List[tuple] = []
+
+    corpus_handler = handlers.get("corpus")
+    web_handler = handlers.get("web")
+
+    for record in records:
+        if corpus_handler and _needs_d4(record):
+            d4_dispatch.append((record, corpus_handler, "corpus"))
+        if web_handler and _needs_d5(record):
+            d5_dispatch.append((record, web_handler, "web"))
+
+    all_dispatch = d4_dispatch + d5_dispatch
+    if not all_dispatch:
         return records
 
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_ROUTES)
 
-    async def _run_handler(record: ClaimRecord, handler: RouteHandler, route: str, reason: str) -> None:
+    async def _run(rec: ClaimRecord, hdlr: RouteHandler, route: str) -> None:
         async with semaphore:
             try:
-                await handler(record)
-            except Exception as exc:  # noqa: BLE001 - one claim's failure must not abort the run
-                record.routing_reason = f"{reason} (handler error: {exc})"
-                logger.exception("execute_routing: handler for route '%s' failed", route)
+                await hdlr(rec)
+            except Exception as exc:  # noqa: BLE001
+                rec.routing_reason = (
+                    f"{rec.routing_reason or ''}; cross-check {route} error: {exc}"
+                )
+                logger.exception(
+                    "apply_cross_checks: handler for route '%s' failed", route,
+                )
 
-    await asyncio.gather(
-        *[_run_handler(record, handler, route, reason) for record, handler, route, reason in to_dispatch]
-    )
+    await asyncio.gather(*[_run(r, h, rt) for r, h, rt in all_dispatch])
 
     return records

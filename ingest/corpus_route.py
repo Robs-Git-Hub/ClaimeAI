@@ -36,6 +36,20 @@ Pipeline, mirroring the web route's search -> summarize -> evaluate shape:
        `claim_verifier` internals. The evaluation call happens exactly once
        per claim, at "high" tier -- never downgraded, per house policy.
 
+Citation-aware per-claim scoping (TG 05.2): `make_corpus_route_handler` takes
+an optional `documents` list (`ingest/corpus_client.py:list_documents`
+output). When supplied, each claim's `cite_set` (wikilink note names, e.g.
+`["Nurullayev & Papa 2023"]`) is matched against `documents` via
+`map_citations_to_document_ids` and, when that yields one or more document
+ids that are also in the manifest's `corpus_ids`, `search_corpus` is scoped
+to just those ids (`provenance_type="corpus_cited_doc"`) instead of the
+whole declared corpus. No citations, no resolvable citations, or no overlap
+with `corpus_ids` all fall back to the whole-scope search
+(`provenance_type="corpus_doc_id"`) -- scoping only ever narrows the search
+when the mapping is unambiguous; it never causes a claim to go unsearched.
+`documents=None` (the default) preserves Phase 04 behavior exactly: no
+mapping is attempted, every search covers all of `corpus_ids`.
+
 Manifest scoping (design decision, TG 04.3): `RouteHandler` (the protocol in
 `ingest/routing.py`) is `async (record) -> Optional[RouteVerdict]` -- it has
 no way to receive `manifest.corpus_ids` directly, and `execute_routing`'s
@@ -46,14 +60,18 @@ module-level `ROUTE_HANDLERS["corpus"] = ...` registration here (unlike
 `web_route_handler`, which needs no per-run parameterization) -- a corpus
 handler is meaningless without knowing which documents to search.
 
-Wiring for the orchestrator (TG 04.4, `scripts/run_heavy.py`):
+Wiring for the orchestrator (TG 04.4/05.2, `scripts/run_heavy.py`):
 
+    from ingest.corpus_client import list_documents
     from ingest.corpus_route import make_corpus_route_handler
     from ingest.routing import ROUTE_HANDLERS, execute_routing
 
     handlers = dict(ROUTE_HANDLERS)
     if manifest.corpus_ids:
-        handlers["corpus"] = make_corpus_route_handler(manifest.corpus_ids)
+        documents = await list_documents()  # pre-fetch once per run
+        handlers["corpus"] = make_corpus_route_handler(
+            manifest.corpus_ids, documents=documents
+        )
     records = await execute_routing(records, manifest, handlers=handlers)
 
 Passing `handlers=None` (the default) when `manifest.corpus_ids` is falsy is
@@ -87,13 +105,18 @@ run (same contract as `web_route_handler`).
 """
 
 import logging
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
 from claim_verifier.evidence_summarization import summarize_evidence_for_claim
 from claim_verifier.schemas import Evidence
-from ingest.corpus_client import CorpusSearchResult, search_corpus
+from ingest.corpus_client import (
+    CorpusDocument,
+    CorpusSearchResult,
+    map_citations_to_document_ids,
+    search_corpus,
+)
 from ingest.routing import RouteHandler
 from utils import call_llm_with_structured_output, get_llm
 from utils.claim_record import ClaimRecord, CorpusVerdict, RouteVerdict
@@ -230,10 +253,42 @@ def _build_provenance(search_result: CorpusSearchResult) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 
+def _resolve_search_scope(
+    record: ClaimRecord,
+    corpus_ids: List[str],
+    documents: Optional[List[CorpusDocument]],
+) -> Tuple[List[str], str]:
+    """Decide which document ids to search and the provenance_type to record.
+
+    Returns `(search_ids, provenance_type)`. `documents=None` (Phase 04
+    callers, backward compat) always returns the whole `corpus_ids` scope
+    unchanged. When `documents` is given, the claim's `cite_set` is mapped
+    to document ids and intersected with `corpus_ids` (never search outside
+    the declared scope); an empty result at any step (no citations,
+    unresolvable citations, no overlap) falls back to the whole scope --
+    scoping only narrows, it never blocks a search. See the module
+    docstring's "Citation-aware per-claim scoping" section.
+    """
+    if documents is None:
+        return corpus_ids, "corpus_doc_id"
+
+    mapped = map_citations_to_document_ids(record.cite_set or [], documents)
+    corpus_ids_set = set(corpus_ids)
+    scoped_ids = [did for did in set(mapped.values()) if did in corpus_ids_set]
+
+    if scoped_ids:
+        return scoped_ids, "corpus_cited_doc"
+    return corpus_ids, "corpus_doc_id"
+
+
 async def _corpus_route_core(
-    record: ClaimRecord, corpus_ids: List[str]
+    record: ClaimRecord,
+    corpus_ids: List[str],
+    documents: Optional[List[CorpusDocument]] = None,
 ) -> Optional[RouteVerdict]:
-    """Verify one claim against the corpus scoped to `corpus_ids`.
+    """Verify one claim against the corpus, scoped to `corpus_ids` (or, when
+    `documents` is supplied, to the subset of `corpus_ids` the claim's
+    citations resolve to -- see `_resolve_search_scope`).
 
     See the module docstring for the full failure-handling contract.
     """
@@ -242,7 +297,9 @@ async def _corpus_route_core(
         logger.warning("corpus_route: no usable claim text on record; skipping")
         return None
 
-    result = await search_corpus(claim_text, document_ids=corpus_ids)
+    search_ids, provenance_type = _resolve_search_scope(record, corpus_ids, documents)
+
+    result = await search_corpus(claim_text, document_ids=search_ids)
     if result is None:
         logger.warning(
             "corpus_route: corpus search unavailable for claim '%s'", claim_text
@@ -256,7 +313,7 @@ async def _corpus_route_core(
             verdict=CorpusVerdict.NO_CORPUS_HITS.value,
             reasoning="No corpus chunks matched this claim.",
             provenance=None,
-            provenance_type="corpus_doc_id",
+            provenance_type=provenance_type,
         )
         record.route_verdicts.append(route_verdict)
         return route_verdict
@@ -278,21 +335,29 @@ async def _corpus_route_core(
         verdict=evaluation.verdict,
         reasoning=evaluation.reasoning,
         provenance=_build_provenance(result),
-        provenance_type="corpus_doc_id",
+        provenance_type=provenance_type,
     )
     record.route_verdicts.append(route_verdict)
     return route_verdict
 
 
-def make_corpus_route_handler(corpus_ids: List[str]) -> RouteHandler:
+def make_corpus_route_handler(
+    corpus_ids: List[str],
+    documents: Optional[List[CorpusDocument]] = None,
+) -> RouteHandler:
     """Build a `RouteHandler` scoped to `corpus_ids`.
+
+    `documents` (optional, `ingest/corpus_client.py:list_documents` output)
+    enables per-claim citation-aware scoping (TG 05.2) -- see the module
+    docstring's "Citation-aware per-claim scoping" section. Omitting it
+    (the default, `None`) preserves Phase 04 behavior exactly.
 
     See the module docstring's "Manifest scoping" section for why this is a
     factory rather than a module-level `ROUTE_HANDLERS["corpus"]` entry, and
-    for the exact wiring the orchestrator (TG 04.4) should use.
+    for the exact wiring the orchestrator (TG 04.4/05.2) should use.
     """
 
     async def _handler(record: ClaimRecord) -> Optional[RouteVerdict]:
-        return await _corpus_route_core(record, corpus_ids)
+        return await _corpus_route_core(record, corpus_ids, documents=documents)
 
     return _handler

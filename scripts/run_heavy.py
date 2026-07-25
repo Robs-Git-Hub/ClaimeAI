@@ -65,14 +65,16 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from claim_extractor import graph as claim_extractor_graph
 from ingest.citation_binder import bind_extracted_claims
+from ingest.corpus_client import list_documents
 from ingest.corpus_route import make_corpus_route_handler
 from ingest.draft_parser import parse_draft
 from ingest.gap_report import (
     assign_suggested_actions,
+    detect_conflicts,
     render_gap_report,
     serialize_results,
 )
-from ingest.routing import ROUTE_HANDLERS, execute_routing
+from ingest.routing import ROUTE_HANDLERS, apply_cross_checks, execute_routing
 from ingest.triage import triage_claims
 from ingest.vault_match import (
     VAULT_MATCH_FALLBACK_ENABLED,
@@ -262,12 +264,29 @@ async def run_pipeline(
             # docstring: base ROUTE_HANDLERS plus a "corpus" entry scoped to
             # this manifest's corpus_ids. Only built when the caller hasn't
             # already injected explicit handlers (test injection must keep
-            # working unchanged).
+            # working unchanged). The document list is pre-fetched once per
+            # run (not per claim) and passed to the factory so the handler
+            # can do citation-aware per-claim scoping (TG 05.2) --
+            # see ingest/corpus_route.py's "Citation-aware per-claim
+            # scoping" docstring section.
             handlers = dict(ROUTE_HANDLERS)
-            handlers["corpus"] = make_corpus_route_handler(manifest.corpus_ids)
+            documents = await list_documents()
+            handlers["corpus"] = make_corpus_route_handler(
+                manifest.corpus_ids, documents=documents
+            )
         await execute_routing(records, manifest, handlers=handlers, policy=policy)
     except Exception as exc:  # noqa: BLE001
         record_failure("routing", exc)
+
+    # --- Cross-checks (TG 05.3: D4 attribution, D5 refutation confirmation) ---
+    try:
+        active_handlers = handlers if handlers is not None else dict(ROUTE_HANDLERS)
+        await apply_cross_checks(records, manifest, active_handlers)
+    except Exception as exc:  # noqa: BLE001
+        record_failure("cross_checks", exc)
+
+    # --- Conflict detection (TG 05.4, pure, LLM-free) ---
+    detect_conflicts(records)
 
     # --- Suggested actions (pure) ---
     assign_suggested_actions(records)

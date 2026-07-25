@@ -15,7 +15,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from claim_verifier.schemas import Evidence, Verdict, VerificationResult
-from ingest.corpus_client import ChunkScores, CorpusChunk, CorpusDocumentResult, CorpusSearchResult
+from ingest.corpus_client import (
+    ChunkScores,
+    CorpusChunk,
+    CorpusDocument,
+    CorpusDocumentResult,
+    CorpusSearchResult,
+)
 from ingest.corpus_route import (
     CorpusEvaluationOutput,
     make_corpus_route_handler,
@@ -48,11 +54,11 @@ def make_verdict(claim_text="A claim.", original_index=0):
     )
 
 
-def make_record(claim_text="A claim.", triage_class=None, route_verdicts=None):
+def make_record(claim_text="A claim.", triage_class=None, route_verdicts=None, cite_set=None):
     return ClaimRecord(
         web_verdict=make_verdict(claim_text),
         citation_status=CitationStatus.CITATION_FREE,
-        cite_set=[],
+        cite_set=cite_set or [],
         position=DraftPosition(sentence_index=0),
         route_verdicts=route_verdicts or [],
         triage_class=triage_class,
@@ -328,6 +334,211 @@ async def test_summarization_respects_config_switch_disabled():
 
 
 # ---------------------------------------------------------------------------
+# Citation-aware per-claim scoping (TG 05.2)
+# ---------------------------------------------------------------------------
+
+
+def make_corpus_document(doc_id="d_cited", surname="Nurullayev", year=2023):
+    return CorpusDocument(
+        id=doc_id,
+        title="A Cited Paper",
+        authors=[{"first_name": "A", "last_name": surname}],
+        publication_year=year,
+    )
+
+
+@pytest.mark.asyncio
+async def test_scoped_search_cited_claim():
+    """A claim whose cite_set resolves to a known document must have its
+    corpus search scoped to just that document id, not the full corpus_ids
+    list."""
+    record = make_record(
+        claim_text="A claim.", cite_set=["Nurullayev & Papa 2023"]
+    )
+    documents = [make_corpus_document(doc_id="d_cited"), CorpusDocument(id="d_other")]
+    search_result = make_search_result(document_id="d_cited")
+    evaluation = CorpusEvaluationOutput(verdict="corpus_supported", reasoning="Yes.")
+
+    with patch(
+        "ingest.corpus_route.search_corpus", new=AsyncMock(return_value=search_result)
+    ) as mock_search, patch(
+        "ingest.corpus_route.summarize_evidence_for_claim",
+        new=AsyncMock(side_effect=lambda claim_text, items: items),
+    ), patch(
+        "ingest.corpus_route._evaluate_corpus_evidence",
+        new=AsyncMock(return_value=evaluation),
+    ):
+        handler = make_corpus_route_handler(
+            ["d_cited", "d_other"], documents=documents
+        )
+        result = await handler(record)
+
+    mock_search.assert_awaited_once()
+    _, kwargs = mock_search.call_args
+    assert kwargs["document_ids"] == ["d_cited"]
+    assert result.verdict == "corpus_supported"
+
+
+@pytest.mark.asyncio
+async def test_whole_scope_no_citations():
+    """A citation-free claim (empty cite_set) falls back to the whole
+    declared corpus_ids scope."""
+    record = make_record(claim_text="A claim.", cite_set=[])
+    documents = [make_corpus_document(doc_id="d_cited")]
+    search_result = make_search_result(document_id="d_cited")
+    evaluation = CorpusEvaluationOutput(verdict="corpus_supported", reasoning="Yes.")
+
+    with patch(
+        "ingest.corpus_route.search_corpus", new=AsyncMock(return_value=search_result)
+    ) as mock_search, patch(
+        "ingest.corpus_route.summarize_evidence_for_claim",
+        new=AsyncMock(side_effect=lambda claim_text, items: items),
+    ), patch(
+        "ingest.corpus_route._evaluate_corpus_evidence",
+        new=AsyncMock(return_value=evaluation),
+    ):
+        handler = make_corpus_route_handler(
+            ["d_cited", "d_other"], documents=documents
+        )
+        await handler(record)
+
+    _, kwargs = mock_search.call_args
+    assert kwargs["document_ids"] == ["d_cited", "d_other"]
+
+
+@pytest.mark.asyncio
+async def test_whole_scope_unresolvable_citations():
+    """Citations that don't map to any known document (no match in the
+    pre-fetched document list) fall back to the whole corpus_ids scope."""
+    record = make_record(claim_text="A claim.", cite_set=["Nobody 1999"])
+    documents = [make_corpus_document(doc_id="d_cited")]
+    search_result = make_search_result(document_id="d_cited")
+    evaluation = CorpusEvaluationOutput(verdict="corpus_supported", reasoning="Yes.")
+
+    with patch(
+        "ingest.corpus_route.search_corpus", new=AsyncMock(return_value=search_result)
+    ) as mock_search, patch(
+        "ingest.corpus_route.summarize_evidence_for_claim",
+        new=AsyncMock(side_effect=lambda claim_text, items: items),
+    ), patch(
+        "ingest.corpus_route._evaluate_corpus_evidence",
+        new=AsyncMock(return_value=evaluation),
+    ):
+        handler = make_corpus_route_handler(
+            ["d_cited", "d_other"], documents=documents
+        )
+        await handler(record)
+
+    _, kwargs = mock_search.call_args
+    assert kwargs["document_ids"] == ["d_cited", "d_other"]
+
+
+@pytest.mark.asyncio
+async def test_whole_scope_no_intersection():
+    """A citation resolves to a real document id, but that id isn't in the
+    manifest's declared corpus_ids -- never search outside the declared
+    scope, fall back to the whole corpus_ids instead."""
+    record = make_record(
+        claim_text="A claim.", cite_set=["Nurullayev & Papa 2023"]
+    )
+    documents = [make_corpus_document(doc_id="d_not_in_scope")]
+    search_result = make_search_result(document_id="d_cited")
+    evaluation = CorpusEvaluationOutput(verdict="corpus_supported", reasoning="Yes.")
+
+    with patch(
+        "ingest.corpus_route.search_corpus", new=AsyncMock(return_value=search_result)
+    ) as mock_search, patch(
+        "ingest.corpus_route.summarize_evidence_for_claim",
+        new=AsyncMock(side_effect=lambda claim_text, items: items),
+    ), patch(
+        "ingest.corpus_route._evaluate_corpus_evidence",
+        new=AsyncMock(return_value=evaluation),
+    ):
+        handler = make_corpus_route_handler(
+            ["d_cited", "d_other"], documents=documents
+        )
+        await handler(record)
+
+    _, kwargs = mock_search.call_args
+    assert kwargs["document_ids"] == ["d_cited", "d_other"]
+
+
+@pytest.mark.asyncio
+async def test_scoped_provenance_type():
+    """A scoped search records provenance_type='corpus_cited_doc', distinct
+    from the whole-scope 'corpus_doc_id'."""
+    record = make_record(
+        claim_text="A claim.", cite_set=["Nurullayev & Papa 2023"]
+    )
+    documents = [make_corpus_document(doc_id="d_cited")]
+    search_result = make_search_result(document_id="d_cited")
+    evaluation = CorpusEvaluationOutput(verdict="corpus_supported", reasoning="Yes.")
+
+    with patch(
+        "ingest.corpus_route.search_corpus", new=AsyncMock(return_value=search_result)
+    ), patch(
+        "ingest.corpus_route.summarize_evidence_for_claim",
+        new=AsyncMock(side_effect=lambda claim_text, items: items),
+    ), patch(
+        "ingest.corpus_route._evaluate_corpus_evidence",
+        new=AsyncMock(return_value=evaluation),
+    ):
+        handler = make_corpus_route_handler(["d_cited"], documents=documents)
+        result = await handler(record)
+
+    assert result.provenance_type == "corpus_cited_doc"
+
+
+@pytest.mark.asyncio
+async def test_scoped_provenance_type_no_hits():
+    """The no-corpus-hits verdict also carries the scoped provenance_type
+    when scoping was applied, not just the evaluated-verdict path."""
+    record = make_record(
+        claim_text="A claim.", cite_set=["Nurullayev & Papa 2023"]
+    )
+    documents = [make_corpus_document(doc_id="d_cited")]
+
+    with patch(
+        "ingest.corpus_route.search_corpus",
+        new=AsyncMock(return_value=empty_search_result()),
+    ):
+        handler = make_corpus_route_handler(["d_cited"], documents=documents)
+        result = await handler(record)
+
+    assert result.verdict == CorpusVerdict.NO_CORPUS_HITS.value
+    assert result.provenance_type == "corpus_cited_doc"
+
+
+@pytest.mark.asyncio
+async def test_backward_compat_no_documents():
+    """documents=None (the default) must behave identically to Phase 04:
+    no citation mapping attempted, search always covers the whole
+    corpus_ids, provenance_type stays 'corpus_doc_id' -- even for a claim
+    that carries a resolvable cite_set."""
+    record = make_record(
+        claim_text="A claim.", cite_set=["Nurullayev & Papa 2023"]
+    )
+    search_result = make_search_result(document_id="d_cited")
+    evaluation = CorpusEvaluationOutput(verdict="corpus_supported", reasoning="Yes.")
+
+    with patch(
+        "ingest.corpus_route.search_corpus", new=AsyncMock(return_value=search_result)
+    ) as mock_search, patch(
+        "ingest.corpus_route.summarize_evidence_for_claim",
+        new=AsyncMock(side_effect=lambda claim_text, items: items),
+    ), patch(
+        "ingest.corpus_route._evaluate_corpus_evidence",
+        new=AsyncMock(return_value=evaluation),
+    ):
+        handler = make_corpus_route_handler(["d_cited", "d_other"])
+        result = await handler(record)
+
+    _, kwargs = mock_search.call_args
+    assert kwargs["document_ids"] == ["d_cited", "d_other"]
+    assert result.provenance_type == "corpus_doc_id"
+
+
+# ---------------------------------------------------------------------------
 # decide_route / execute_routing integration
 # ---------------------------------------------------------------------------
 
@@ -413,10 +624,10 @@ async def test_corpus_handler_failure_is_recorded_and_run_continues():
 
 
 def test_policy_never_web_row_declares_corpus_candidate():
-    """POLICY's never-web row should declare 'corpus' as a candidate route
-    (the anticipated Phase 04 change) without altering the web-eligible rows."""
+    """POLICY's never-web row should declare 'corpus' as a candidate route.
+    General row declares both corpus and web (TG 05.1 cascade)."""
     never_web_row = next(row for row in POLICY if row.name == "never-web")
     assert "corpus" in never_web_row.candidate_routes
 
     general_row = next(row for row in POLICY if row.name == "general")
-    assert general_row.candidate_routes == ("web",)
+    assert general_row.candidate_routes == ("corpus", "web")

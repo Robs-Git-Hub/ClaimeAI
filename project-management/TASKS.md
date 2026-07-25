@@ -294,17 +294,64 @@ Plan: `phase-plans/phase-04-corpus-rag-route.md`. Backend repo cloned at `../doc
 
 ---
 
-## Phase 05: Three-Tier Evidence Cascade — APPROVED (Session 10)
+## Phase 05: Three-Tier Evidence Cascade — IN PROGRESS (Session 11)
 
 Plan: `phase-plans/phase-05-three-tier-evidence-cascade.md`. Reworks routing so vault, corpus, and web form a domain-general verification cascade. Adds citation-aware corpus scoping, importance-gated cross-checks (D4/D5), pure-code conflict detection with `source-conflict` and `vault-corpus-check-needed` flags. Supersedes Decision 44 ("corpus only for never-web").
 
-Task breakdown within each TG is the implementing session's job.
+TDD throughout: tests written first (red), then implementation makes them pass (green). Testing tiers: NARROW (targeted test file, 1–5s) during iteration; MID (`pytest -m "not slow"`, ~30s) at TG completion; FULL (entire suite) at milestone only.
 
-### TG 05.1: Cascade routing
-### TG 05.2: Citation-aware corpus scoping
-### TG 05.3: Importance-gated cross-checks (D4, D5)
-### TG 05.4: Conflict detection, flags, and report
-### TG 05.5: Milestone and wrap
+Dependency order: TG 05.1 → 05.2 → 05.3 → 05.4 → 05.5.
+
+### TG 05.1: Cascade Routing — COMPLETE
+
+Normalization function (`normalize_verdict`) implemented here (needed for cascade decisions); reused by TG 05.4 for conflict detection.
+
+- [x] 05.1.1a Write tests for `normalize_verdict()` — exhaustive mapping of every verdict string to support/refute/silent; unknown values → silent → NARROW (`tests/test_routing.py`)
+- [x] 05.1.1b Implement `normalize_verdict()` in `ingest/routing.py` — pure function, D6 table, plus `_is_cascade_silent()` (only known-silent values trigger escalation, preserving extensibility) → NARROW
+- [x] 05.1.2a Write tests for updated policy table — general row `candidate_routes=("corpus", "web")`; no-corpus manifest still routes to web directly → NARROW (`tests/test_routing.py`)
+- [x] 05.1.2b Update POLICY general row to `("corpus", "web")` → NARROW
+- [x] 05.1.3a Write tests for cascade in `execute_routing()` — vault-silent→corpus→support (stops); vault-silent→corpus-silent→web; never-web→corpus-silent→unverifiable; no-corpus manifest→web (today's behavior); handler failure→degrade to next tier with reason (synthetic `handler_error` verdict); handler returns None→degrade; _already_routed prevents double-routing; light profile byte-identical; max rounds safety bound; multi-record independence → NARROW (`tests/test_routing.py`, 33 new tests)
+- [x] 05.1.3b Implement cascade in `execute_routing()` — multi-round decide→dispatch→check-silent loop with `_redecide()` helper; pre-count tracking for verdict detection; max 3 rounds → NARROW
+- [x] 05.1.4 TG 05.1 complete — regression check → MID (60 routing tests pass)
+
+### TG 05.2: Citation-Aware Corpus Scoping — COMPLETE
+
+- [x] 05.2.1a Write tests for scoped corpus handler — cited claim with resolvable citations → scoped search; unresolvable citations → whole-scope fallback; citation-free → whole-scope; no-intersection fallback; scoped provenance_type `corpus_cited_doc`; no-hits path carries scoped type; backward compat with documents=None → NARROW (`tests/test_corpus_route.py`, 8 new tests)
+- [x] 05.2.1b Update `make_corpus_route_handler()` factory to accept `documents` parameter; `_resolve_search_scope()` helper resolves cite_set→document_ids, intersects with corpus_ids → NARROW
+- [x] 05.2.2a Write tests for corpus document pre-fetch and handler wiring in run_heavy.py → NARROW (`tests/test_orchestration.py`)
+- [x] 05.2.2b Wire `list_documents()` pre-fetch + pass to factory in `scripts/run_heavy.py` → NARROW
+- [x] 05.2.3 TG 05.2 complete — regression check → MID (106 tests across routing/corpus/orchestration). Fixed Phase 04 policy assertion (`test_policy_never_web_row_declares_corpus_candidate`) for TG 05.1 general row change.
+
+### TG 05.3: Importance-Gated Cross-Checks (D4, D5) — COMPLETE
+
+Cross-checks are post-routing steps: direct handler invocations that bypass the policy table. Function `apply_cross_checks()` in `ingest/routing.py`.
+
+- [x] 05.3.1a Write tests for D4 attribution check — vault-resolved + cited + importance >= 4 + corpus-mapped → corpus check; importance < 4 → no check; citation-free → no check; corpus already routed → skip; no corpus handler → no crash → NARROW (`tests/test_routing.py`, 5 tests)
+- [x] 05.3.1b Implement D4 in `apply_cross_checks()` via `_needs_d4()` gate → NARROW
+- [x] 05.3.2a Write tests for D5 refutation confirmation — single-tier refute + importance >= 4 + web-eligible → web check; importance < 4 → no check; support never triggers; never-web → no check; web already exists → skip; corpus refute also triggers; web refute → no further check → NARROW (`tests/test_routing.py`, 7 tests)
+- [x] 05.3.2b Implement D5 in `apply_cross_checks()` via `_needs_d5()` gate → NARROW
+- [x] 05.3.3b Wire `apply_cross_checks()` in run_heavy.py between execute_routing and assign_suggested_actions → NARROW
+- [x] 05.3.4 TG 05.3 complete — regression check → MID (96 tests across routing + orchestration)
+
+### TG 05.4: Conflict Detection, Flags, and Report — COMPLETE
+
+All runtime code in this TG is pure (zero LLM calls). Uses normalization from TG 05.1.
+
+- [x] 05.4.1a/b `conflict_flags: List[str]` field added to ClaimRecord (default empty). 2 tests in `tests/test_claim_record.py` → NARROW
+- [x] 05.4.2a/b `detect_conflicts()` pure function in `ingest/gap_report.py` — `_normalized_verdicts_for_routes()` + `_opposing()` helpers; `SHARED_LINEAGE_ROUTES`, `VAULT_ROUTES`, `WEB_ROUTE`, `CORPUS_ROUTE` constants. 8 tests in `tests/test_gap_report.py` → NARROW
+- [x] 05.4.3a/b `assign_suggested_actions()` updated: `source-conflict` in conflict_flags → REVISE_CLAIM as top priority (before vault_contradicted). 1 test → NARROW
+- [x] 05.4.4a/b Gap report extensions: `_render_source_conflict()` per-claim block with shared vs web provenance; vault-corpus mismatch subsection in Vault Improvement Signals; `_is_single_lineage()` derives D8 at render time; all gated on has_vault (light profile unchanged). 4 tests → NARROW
+- [x] 05.4.5 Update `docs/playbook/claim-record-design.md` — normalization table, both flags, single-lineage, superseded scope line, lineage groups, cross-check gates, assign_suggested_actions priority update
+- [x] 05.4.6 TG 05.4 complete — MID regression: 468 passed, 3 deselected
+
+### TG 05.5: Milestone and Wrap — IN PROGRESS
+
+- [x] 05.5.1 Full test suite green → FULL: 471 passed, 0 failed
+- [x] 05.5.2a MILESTONE (live, 3 runs): cascade demonstrated — Run 3 (correct vault config): 17 claims, 11 vault-resolved, 5 corpus, 1 web. ~2 min wall-clock. Cascade corpus→web demonstrated on 1 claim. Single-lineage annotations on corpus-only claims.
+- [ ] 05.5.2b MILESTONE: source-conflict flag NOT demonstrated live. Reason: test file has no wikilink citations → D4 attribution check never fires → no claim gets both corpus and web verdicts. Need a cited test file where citations map to corpus documents. The mechanism is fully tested offline (8 detect_conflicts tests + 1 priority test + 4 rendering tests).
+- [x] 05.5.3a CLAUDE.md pipeline section updated with cascade. claim-record-design.md updated with Phase 05 section.
+- [ ] 05.5.3b `docs/websearch-and-costs.md` NOT updated with corpus cost profile (deferred to incoming session)
+- [x] 05.5.4 HANDOVER.md updated; pushed to origin
 
 ---
 

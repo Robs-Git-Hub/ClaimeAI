@@ -50,10 +50,10 @@ This fork strips the original to the agent backend only (no web frontend, no Chr
 - `ingest/alignment.py` — cited-claim alignment: `gather_evidence()` (one-hop vault traversal) + `evaluate_alignment()` (high-tier LLM evaluation)
 - `ingest/vault_match.py` — citation-free vault matching: `batch_match_claims()` (mid-tier batch proposal) + `verify_matches()` (high-tier adversarial verification)
 - `ingest/triage.py` — batch triage classifier: `triage_claims()` populates `triage_class`, `citation_expectation`, `importance` on all claims in one mid-tier call
-- `ingest/routing.py` — routing policy + route-handler registry: `decide_route()` (pure function, policy table), `execute_routing()` (dispatches to handlers); never-web row routes to corpus when available
+- `ingest/routing.py` — routing policy + route-handler registry: `decide_route()` (pure function, policy table), `execute_routing()` (cascade: vault→corpus→web on silent verdicts), `normalize_verdict()` (D6 table), `apply_cross_checks()` (D4 attribution, D5 refutation confirmation)
 - `ingest/corpus_client.py` — HTTP client for doc-rag-backend (`api.ragtogo.com`): `search_corpus()`, `list_documents()`, `map_citations_to_document_ids()`; config from `[corpus_api]` in config.toml
-- `ingest/corpus_route.py` — corpus route handler: `make_corpus_route_handler(corpus_ids)` factory; search → Evidence wrap → summarize (mid) → route-local high-tier evaluation → `RouteVerdict(route="corpus")`
-- `ingest/gap_report.py` — gap report rendering: `assign_suggested_actions()`, `render_gap_report()`, `serialize_results()`
+- `ingest/corpus_route.py` — corpus route handler: `make_corpus_route_handler(corpus_ids, documents)` factory; citation-aware scoping (TG 05.2); search → Evidence wrap → summarize (mid) → route-local high-tier evaluation → `RouteVerdict(route="corpus")`
+- `ingest/gap_report.py` — gap report rendering: `detect_conflicts()` (pure, D7 flags), `assign_suggested_actions()`, `render_gap_report()`, `serialize_results()`
 - `claim_verifier/evidence_summarization.py` — evidence summarization: `summarize_evidence_for_claim()` condenses raw search results at mid tier before high-tier evaluation
 - `scripts/run_from_pdf.py` — CLI entry point for PDF/text/markdown fact-checking (light profile)
 - `scripts/run_heavy.py` — CLI entry point for heavy-profile runs: draft + vault → parse → extract → bind → vault verify → triage → route → gap report; `--corpus-ids` for corpus scoping
@@ -84,19 +84,26 @@ Draft (markdown with wikilinks) → parse_draft() → bind_citations() → [Clai
   All claims:      → assign_suggested_actions() → render_gap_report()
 ```
 
-### Triage & Routing (Phase 03 — heavy profile, after vault verification)
+### Triage, Routing & Cascade (Phases 03–05 — heavy profile, after vault verification)
 
 ```
 [ClaimRecords with vault verdicts]
   → triage_claims (mid tier, one batch call) → [triage_class, citation_expectation, importance]
-  → decide_route (pure function, policy table):
+  → execute_routing with cascade (decide → dispatch → check-silent → re-decide):
       vault-resolved (supported/contradicted) → no further routing
       trivial                                 → skip
-      novel-result / dataset-dependent        → corpus (if corpus_ids declared), else unverifiable
-      general-factual / academic-citable / unclassified → route to web
+      novel-result / dataset-dependent        → corpus only (never web)
+      general-factual / academic-citable / unclassified → corpus first, web if corpus silent
+  → corpus route: search_corpus (citation-scoped when cited) → summarize (mid) → evaluate (high, route-local)
   → web route: search → summarize_evidence (mid tier) → evaluate_evidence (high tier)
-  → corpus route: search_corpus(scoped by document_ids) → summarize (mid) → evaluate (high, route-local)
-  → render_gap_report() with triage, routing decisions, route summary
+  → apply_cross_checks (D4/D5, importance-gated):
+      D4: vault-resolved + cited + importance ≥ 4 → scoped corpus attribution check
+      D5: single-tier refute + importance ≥ 4 + web-eligible → web confirmation
+  → detect_conflicts (pure code, D6/D7):
+      source-conflict: shared-lineage vs web disagree (support vs refute)
+      vault-corpus-check-needed: vault vs corpus disagree
+  → assign_suggested_actions (source-conflict outranks individual verdicts)
+  → render_gap_report() with conflicts, single-lineage annotations, route summary
 ```
 
 Full-vault fallback: claims unmatched by the paper-scoped batch pass get one additional high-tier batch call against the full vault (evidence types only, no argument_pyramid filter). Matches from the fallback are flagged as "consider adding argument_pyramid tag" in the gap report.

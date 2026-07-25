@@ -1,6 +1,6 @@
 # Phase 05: Three-Tier Evidence Cascade
 
-**Status:** APPROVED (user sign-off, Session 10). Design decisions below were made interactively with the user in Session 10.
+**Status:** IMPLEMENTATION COMPLETE, MILESTONE PARTIAL (Session 11). TGs 05.1–05.4 fully implemented (68 new tests, 471 total). Live cascade demonstrated. Source-conflict flag not demonstrated live — needs a cited test file (see Lessons Learned).
 **Goal:** Rework routing so the three evidence sources — vault, corpus, web — form a domain-general verification cascade that any claim can traverse, replacing the Phase 04 scope line that reserved the corpus route for never-web claims only. Add independent-lineage double-checks for high-importance findings and pure-code conflict detection between tiers.
 
 ---
@@ -178,6 +178,26 @@ Task breakdown within each TG is the implementing session's job. Implementation 
 4. **Double-lineage bookkeeping bugs** (same claim, verdicts from 3 tiers) could confuse `assign_suggested_actions`. Constraint: Phase 02's action-assignment semantics must be revisited deliberately in TG 05.4, not patched ad hoc — a claim with `source-conflict` outranks its individual verdicts for action purposes.
 5. **Corpus availability flapping** (self-hosted backend down mid-run) must degrade per-claim to the next tier with a recorded reason, not abort — same rule as every route today.
 
+## Implementation notes (Session 11 prep)
+
+**VerificationResult enum gap:** `claim_verifier/schemas.py` only defines `SUPPORTED` and `REFUTED` (INSUFFICIENT_INFORMATION is commented out). The LLM prompt describes four values but schema constraint forces two. D6 normalization handles all strings defensively (unknown → silent). Web RouteVerdicts use `verdict.result.value` ("Supported"/"Refuted").
+
+**Cascade architecture:** `execute_routing` becomes a multi-round loop (decide→dispatch→check-silent→re-decide). Vault runs BEFORE execute_routing in run_heavy.py, so cascade only handles corpus↔web escalation. Max 3 rounds per claim.
+
+**D4/D5 are post-routing:** These bypass the policy table. `apply_cross_checks()` runs after `execute_routing`, before `assign_suggested_actions`. D4 uses the same scoped corpus handler from TG 05.2.
+
+**Citation scoping approach:** Pre-fetch `list_documents()` once in run_heavy.py, pass to `make_corpus_route_handler(corpus_ids, documents=documents)`. Handler resolves `record.cite_set` per-claim via existing `map_citations_to_document_ids()`, intersects with declared `corpus_ids`.
+
+## Lessons learned (Session 11)
+
+1. **`load_vault()` appends `v-research` internally.** Pass the vault ROOT (e.g. `vault-main`), not the research subdirectory (`vault-main/v-research`). Passing the full path silently produces zero notes because it looks in `v-research/v-research/`. This caused the first two milestone runs to have no vault verdicts at all. No error is raised — vault stages silently no-op on empty vault.
+
+2. **Vault `argument_pyramid` tags can change in the sibling repo.** The tag was renamed from `ukraine-vote` to `un-ukraine-russia-war-votes-working-paper` between sessions. The `--argument-pyramid` CLI value must match the current vault frontmatter exactly. A mismatch silently loads zero notes (same effect as passing the wrong path).
+
+3. **Source-conflict requires a CITED claim that reaches both corpus and web.** The current test file (`ukraine-intro-test.txt`) has no wikilink citations, so D4 attribution checks never fire and no claim gets both corpus and web verdicts on the same claim. To demonstrate source-conflict live, create a test file with wikilink citations (e.g. `[[de Carvalho 2025]]`) whose citations map to corpus documents via `map_citations_to_document_ids()`. The 98-votes claim with a `[[de Carvalho 2025]]` citation would trigger D4 (vault-resolved + cited + importance >= 4 → scoped corpus check), producing corpus_supported (98) alongside vault_contradicted (93), which would fire `vault-corpus-check-needed`. Then D5 (refutation confirmation) would trigger web, producing web_refuted (93) → `source-conflict`.
+
+4. **Cascade stop-on-support is correct but masks corpus errors.** When vault misses a claim and corpus supports the wrong value (e.g. 98), the cascade stops (D1). Web never runs, so the error goes undetected. This is by design (D5: supports never trigger cross-checks — cost guardrail). The fix is vault-matching quality, not cascade policy.
+
 ## Roadmap after this phase
 
-Phase 06 (Deep Research Commissions), Phase 07 (Draft Update Loop). The edge-case backlog carries forward; add: triage importance-distribution recalibration (Risk 1) if milestone data warrants it.
+Phase 06 (Deep Research Commissions), Phase 07 (Draft Update Loop). The edge-case backlog carries forward; add: triage importance-distribution recalibration (Risk 1) if milestone data warrants it; source-conflict live demonstration with a cited test file.

@@ -307,6 +307,26 @@ def test_serialization_round_trip():
 # ---------------------------------------------------------------------------
 
 
+def test_conflict_flags_default_empty():
+    record = ClaimRecord(
+        citation_status=CitationStatus.CITATION_FREE,
+        position=DraftPosition(sentence_index=0),
+    )
+    assert record.conflict_flags == []
+
+
+def test_conflict_flags_serialization():
+    original = ClaimRecord(
+        citation_status=CitationStatus.CITATION_FREE,
+        position=DraftPosition(sentence_index=0),
+        conflict_flags=["source-conflict", "vault-corpus-check-needed"],
+    )
+    dumped = original.model_dump()
+    restored = ClaimRecord.model_validate(dumped)
+    assert restored.conflict_flags == ["source-conflict", "vault-corpus-check-needed"]
+    assert restored == original
+
+
 def test_routing_fields_default_to_none():
     record = ClaimRecord(
         citation_status=CitationStatus.CITATION_FREE,

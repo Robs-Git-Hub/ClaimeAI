@@ -186,6 +186,15 @@ class ClaimRecord(BaseModel):
     routing_reason: Optional[str] = Field(
         default=None, description="Phase 03 (TG 03.2): human-readable reason for the routing decision"
     )
+    conflict_flags: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Phase 05 (TG 05.4): support-vs-refute disagreements between evidence "
+            "tiers, detected by ingest.gap_report.detect_conflicts. "
+            '"source-conflict" -- web disagrees with vault/corpus. '
+            '"vault-corpus-check-needed" -- vault disagrees with corpus.'
+        ),
+    )
 
     @property
     def claim_text(self) -> Optional[str]:

@@ -1,9 +1,12 @@
-"""Tests for routing policy and route-handler registry (TG 03.2).
+"""Tests for routing policy and route-handler registry (TG 03.2, TG 05.1).
 
 ``decide_route`` is a pure, deterministic function (no LLM, no I/O, no
 graph import) that decides what happens to a claim after vault
 verification + triage. ``execute_routing`` applies it across a batch of
 records and dispatches to registered route handlers.
+
+TG 05.1 adds ``normalize_verdict`` (pure mapping to support/refute/silent)
+and cascade logic in ``execute_routing`` (escalate on silent verdicts).
 
 See ingest/routing.py.
 """
@@ -15,6 +18,9 @@ import pytest
 
 from claim_verifier.schemas import Evidence, Verdict, VerificationResult
 from ingest.routing import (
+    NORM_REFUTE,
+    NORM_SILENT,
+    NORM_SUPPORT,
     POLICY,
     RESOLVED,
     ROUTE_HANDLERS,
@@ -22,8 +28,10 @@ from ingest.routing import (
     UNVERIFIABLE,
     PolicyRow,
     RoutingDecision,
+    apply_cross_checks,
     decide_route,
     execute_routing,
+    normalize_verdict,
     route_decision,
     web_route_handler,
 )
@@ -67,6 +75,18 @@ def make_record(
 
 def web_available_manifest():
     return ResourceManifest(draft_path="draft.md", web_enabled=True)
+
+
+def corpus_and_web_manifest():
+    return ResourceManifest(
+        draft_path="draft.md", web_enabled=True, corpus_ids=["doc-1"]
+    )
+
+
+def corpus_only_manifest():
+    return ResourceManifest(
+        draft_path="draft.md", web_enabled=False, corpus_ids=["doc-1"]
+    )
 
 
 def no_routes_manifest():
@@ -461,3 +481,665 @@ async def test_execute_routing_uses_module_level_handlers_by_default():
 
     assert result[0].routing_decision == route_decision("web")
     assert any(rv.route == "web" for rv in result[0].route_verdicts)
+
+
+# ===================================================================
+# TG 05.1 — normalize_verdict
+# ===================================================================
+
+
+class TestNormalizeVerdict:
+    """normalize_verdict maps any verdict string to support/refute/silent."""
+
+    # -- support verdicts --
+
+    def test_vault_supported(self):
+        assert normalize_verdict("vault_supported") == NORM_SUPPORT
+
+    def test_corpus_supported(self):
+        assert normalize_verdict("corpus_supported") == NORM_SUPPORT
+
+    def test_web_supported(self):
+        assert normalize_verdict("Supported") == NORM_SUPPORT
+
+    # -- refute verdicts --
+
+    def test_vault_contradicted(self):
+        assert normalize_verdict("vault_contradicted") == NORM_REFUTE
+
+    def test_corpus_contradicted(self):
+        assert normalize_verdict("corpus_contradicted") == NORM_REFUTE
+
+    def test_web_refuted(self):
+        assert normalize_verdict("Refuted") == NORM_REFUTE
+
+    # -- silent verdicts --
+
+    def test_not_supported(self):
+        assert normalize_verdict("not_supported") == NORM_SILENT
+
+    def test_no_vault_match(self):
+        assert normalize_verdict("no_vault_match") == NORM_SILENT
+
+    def test_note_not_in_vault(self):
+        assert normalize_verdict("note_not_in_vault") == NORM_SILENT
+
+    def test_insufficient_vault_content(self):
+        assert normalize_verdict("insufficient_vault_content") == NORM_SILENT
+
+    def test_corpus_insufficient(self):
+        assert normalize_verdict("corpus_insufficient") == NORM_SILENT
+
+    def test_no_corpus_hits(self):
+        assert normalize_verdict("no_corpus_hits") == NORM_SILENT
+
+    def test_web_insufficient_information(self):
+        assert normalize_verdict("Insufficient Information") == NORM_SILENT
+
+    def test_web_conflicting_evidence(self):
+        assert normalize_verdict("Conflicting Evidence") == NORM_SILENT
+
+    # -- edge cases --
+
+    def test_unknown_string(self):
+        assert normalize_verdict("something_unexpected") == NORM_SILENT
+
+    def test_empty_string(self):
+        assert normalize_verdict("") == NORM_SILENT
+
+    def test_case_sensitive_supported_lowercase_is_silent(self):
+        """Exact match, not case-insensitive: 'supported' != 'Supported'."""
+        assert normalize_verdict("supported") == NORM_SILENT
+
+    def test_case_sensitive_refuted_lowercase_is_silent(self):
+        assert normalize_verdict("refuted") == NORM_SILENT
+
+
+# ===================================================================
+# TG 05.1 — Policy table updates
+# ===================================================================
+
+
+class TestPolicyTableCascade:
+    """Verify the POLICY table reflects Phase 05 cascade structure."""
+
+    def test_general_row_candidate_routes_include_corpus_then_web(self):
+        general_row = next(r for r in POLICY if r.name == "general")
+        assert general_row.candidate_routes == ("corpus", "web")
+
+    def test_never_web_row_still_has_corpus_only(self):
+        never_web_row = next(r for r in POLICY if r.name == "never-web")
+        assert never_web_row.candidate_routes == ("corpus",)
+
+    def test_general_no_corpus_available_routes_to_web(self):
+        """When corpus is not in available_routes, decide_route skips it."""
+        record = make_record(triage_class="general-factual")
+        result = decide_route(record, ["web"])
+        assert result.decision == route_decision("web")
+
+    def test_general_corpus_available_routes_to_corpus_first(self):
+        """When corpus is in available_routes, decide_route picks it first."""
+        record = make_record(triage_class="general-factual")
+        result = decide_route(record, ["web", "corpus"])
+        assert result.decision == route_decision("corpus")
+
+
+# ===================================================================
+# TG 05.1 — Cascade routing in execute_routing
+# ===================================================================
+
+
+def _make_corpus_handler(verdict_str="corpus_supported"):
+    """Factory: returns a mock corpus handler that appends a RouteVerdict."""
+    calls = []
+
+    async def handler(record):
+        calls.append(record)
+        rv = RouteVerdict(
+            route="corpus", verdict=verdict_str, reasoning="stub corpus"
+        )
+        record.route_verdicts.append(rv)
+        return rv
+
+    return handler, calls
+
+
+def _make_web_handler(verdict_str="Supported"):
+    """Factory: returns a mock web handler that appends a RouteVerdict."""
+    calls = []
+
+    async def handler(record):
+        calls.append(record)
+        rv = RouteVerdict(
+            route="web", verdict=verdict_str, reasoning="stub web"
+        )
+        record.route_verdicts.append(rv)
+        return rv
+
+    return handler, calls
+
+
+class TestCascadeRouting:
+    """execute_routing cascade: silent verdicts trigger escalation to next tier."""
+
+    @pytest.mark.asyncio
+    async def test_corpus_silent_escalates_to_web(self):
+        """Corpus returns corpus_insufficient -> cascade re-routes to web."""
+        record = make_record(triage_class="general-factual")
+        manifest = corpus_and_web_manifest()
+
+        corpus_handler, corpus_calls = _make_corpus_handler("corpus_insufficient")
+        web_handler, web_calls = _make_web_handler("Supported")
+
+        result = await execute_routing(
+            [record], manifest,
+            handlers={"corpus": corpus_handler, "web": web_handler},
+        )
+
+        assert len(corpus_calls) == 1
+        assert len(web_calls) == 1
+        # Final decision should reflect the web route
+        assert result[0].routing_decision == route_decision("web")
+        assert "cascade" in result[0].routing_reason.lower()
+
+    @pytest.mark.asyncio
+    async def test_corpus_support_stops_cascade(self):
+        """Corpus returns corpus_supported -> no escalation to web."""
+        record = make_record(triage_class="general-factual")
+        manifest = corpus_and_web_manifest()
+
+        corpus_handler, corpus_calls = _make_corpus_handler("corpus_supported")
+        web_handler, web_calls = _make_web_handler("Supported")
+
+        await execute_routing(
+            [record], manifest,
+            handlers={"corpus": corpus_handler, "web": web_handler},
+        )
+
+        assert len(corpus_calls) == 1
+        assert len(web_calls) == 0
+
+    @pytest.mark.asyncio
+    async def test_corpus_refute_stops_cascade(self):
+        """Corpus returns corpus_contradicted -> no escalation to web."""
+        record = make_record(triage_class="general-factual")
+        manifest = corpus_and_web_manifest()
+
+        corpus_handler, corpus_calls = _make_corpus_handler("corpus_contradicted")
+        web_handler, web_calls = _make_web_handler("Supported")
+
+        await execute_routing(
+            [record], manifest,
+            handlers={"corpus": corpus_handler, "web": web_handler},
+        )
+
+        assert len(corpus_calls) == 1
+        assert len(web_calls) == 0
+
+    @pytest.mark.asyncio
+    async def test_never_web_corpus_silent_becomes_unverifiable(self):
+        """never-web claim: corpus silent -> UNVERIFIABLE (no web fallback)."""
+        record = make_record(triage_class="novel-result")
+        manifest = corpus_and_web_manifest()
+
+        corpus_handler, corpus_calls = _make_corpus_handler("no_corpus_hits")
+        web_handler, web_calls = _make_web_handler("Supported")
+
+        result = await execute_routing(
+            [record], manifest,
+            handlers={"corpus": corpus_handler, "web": web_handler},
+        )
+
+        assert len(corpus_calls) == 1
+        assert len(web_calls) == 0
+        assert result[0].routing_decision == UNVERIFIABLE
+
+    @pytest.mark.asyncio
+    async def test_no_corpus_in_manifest_routes_web_directly(self):
+        """No corpus_ids in manifest -> web directly, same as pre-cascade."""
+        record = make_record(triage_class="general-factual")
+        manifest = web_available_manifest()  # no corpus_ids
+
+        web_handler, web_calls = _make_web_handler("Supported")
+
+        result = await execute_routing(
+            [record], manifest,
+            handlers={"web": web_handler},
+        )
+
+        assert len(web_calls) == 1
+        assert result[0].routing_decision == route_decision("web")
+
+    @pytest.mark.asyncio
+    async def test_handler_exception_escalates_to_next_tier(self):
+        """Corpus handler raises -> record degrades to web with reason."""
+        record = make_record(triage_class="general-factual")
+        manifest = corpus_and_web_manifest()
+
+        async def failing_corpus(rec):
+            raise RuntimeError("corpus exploded")
+
+        web_handler, web_calls = _make_web_handler("Supported")
+
+        result = await execute_routing(
+            [record], manifest,
+            handlers={"corpus": failing_corpus, "web": web_handler},
+        )
+
+        assert len(web_calls) == 1
+        assert result[0].routing_decision == route_decision("web")
+        assert "corpus exploded" in result[0].routing_reason
+
+    @pytest.mark.asyncio
+    async def test_handler_returns_none_escalates_to_next_tier(self):
+        """Corpus handler returns None (no verdict appended) -> escalate."""
+        record = make_record(triage_class="general-factual")
+        manifest = corpus_and_web_manifest()
+
+        none_calls = []
+
+        async def none_corpus(rec):
+            none_calls.append(rec)
+            return None  # no verdict appended
+
+        web_handler, web_calls = _make_web_handler("Supported")
+
+        result = await execute_routing(
+            [record], manifest,
+            handlers={"corpus": none_corpus, "web": web_handler},
+        )
+
+        assert len(none_calls) == 1
+        assert len(web_calls) == 1
+        assert result[0].routing_decision == route_decision("web")
+
+    @pytest.mark.asyncio
+    async def test_already_routed_prevents_double_dispatch(self):
+        """A record with an existing corpus verdict should not re-run corpus."""
+        record = make_record(
+            triage_class="general-factual",
+            route_verdicts=[
+                RouteVerdict(route="corpus", verdict="corpus_insufficient")
+            ],
+        )
+        manifest = corpus_and_web_manifest()
+
+        corpus_handler, corpus_calls = _make_corpus_handler("corpus_supported")
+        web_handler, web_calls = _make_web_handler("Supported")
+
+        result = await execute_routing(
+            [record], manifest,
+            handlers={"corpus": corpus_handler, "web": web_handler},
+        )
+
+        # Corpus already routed -> skip corpus, go to web
+        assert len(corpus_calls) == 0
+        assert len(web_calls) == 1
+        assert result[0].routing_decision == route_decision("web")
+
+    @pytest.mark.asyncio
+    async def test_max_cascade_rounds_safety_bound(self):
+        """Cascade stops after MAX_CASCADE_ROUNDS even if still silent."""
+        record = make_record(triage_class="general-factual")
+        manifest = corpus_and_web_manifest()
+
+        round_count = []
+
+        async def always_silent_handler(rec):
+            round_count.append(1)
+            # Append a silent verdict under a unique route name each time
+            # (to avoid _already_routed blocking). In practice this can't
+            # happen because there are only 2 candidate routes, but we test
+            # the safety bound.
+            rv = RouteVerdict(
+                route=f"fake-{len(round_count)}",
+                verdict="silent",
+                reasoning="always silent",
+            )
+            rec.route_verdicts.append(rv)
+            return rv
+
+        # We test by providing handlers for corpus and web that both return
+        # silent verdicts. After corpus-silent -> web. After web-silent ->
+        # no more candidates. So cascade naturally stops at 2 rounds.
+        corpus_handler, _ = _make_corpus_handler("corpus_insufficient")
+        web_handler, _ = _make_web_handler("Insufficient Information")
+
+        result = await execute_routing(
+            [record], manifest,
+            handlers={"corpus": corpus_handler, "web": web_handler},
+        )
+
+        # Both handlers called, but no infinite loop
+        assert any(rv.route == "corpus" for rv in record.route_verdicts)
+        assert any(rv.route == "web" for rv in record.route_verdicts)
+
+    @pytest.mark.asyncio
+    async def test_multiple_records_cascade_independently(self):
+        """Each record cascades independently: one escalates, another stops."""
+        rec_silent = make_record(
+            claim_text="Claim A", triage_class="general-factual"
+        )
+        rec_supported = make_record(
+            claim_text="Claim B", triage_class="general-factual"
+        )
+
+        manifest = corpus_and_web_manifest()
+
+        corpus_call_texts = []
+        web_call_texts = []
+
+        async def selective_corpus(rec):
+            corpus_call_texts.append(rec.claim_text)
+            if rec.claim_text == "Claim A":
+                rv = RouteVerdict(
+                    route="corpus", verdict="corpus_insufficient", reasoning="no hits"
+                )
+            else:
+                rv = RouteVerdict(
+                    route="corpus", verdict="corpus_supported", reasoning="found it"
+                )
+            rec.route_verdicts.append(rv)
+            return rv
+
+        async def web_handler(rec):
+            web_call_texts.append(rec.claim_text)
+            rv = RouteVerdict(
+                route="web", verdict="Supported", reasoning="web found it"
+            )
+            rec.route_verdicts.append(rv)
+            return rv
+
+        result = await execute_routing(
+            [rec_silent, rec_supported], manifest,
+            handlers={"corpus": selective_corpus, "web": web_handler},
+        )
+
+        # Both went to corpus
+        assert "Claim A" in corpus_call_texts
+        assert "Claim B" in corpus_call_texts
+        # Only Claim A escalated to web
+        assert "Claim A" in web_call_texts
+        assert "Claim B" not in web_call_texts
+        # Final decisions
+        assert result[0].routing_decision == route_decision("web")
+        assert result[1].routing_decision == route_decision("corpus")
+
+    @pytest.mark.asyncio
+    async def test_no_corpus_hits_all_four_silent_verdicts_escalate(self):
+        """All four corpus-silent verdicts trigger escalation."""
+        for silent_verdict in [
+            "corpus_insufficient", "no_corpus_hits",
+        ]:
+            record = make_record(triage_class="general-factual")
+            manifest = corpus_and_web_manifest()
+            corpus_handler, _ = _make_corpus_handler(silent_verdict)
+            web_handler, web_calls = _make_web_handler("Supported")
+
+            await execute_routing(
+                [record], manifest,
+                handlers={"corpus": corpus_handler, "web": web_handler},
+            )
+
+            assert len(web_calls) == 1, (
+                f"Expected web escalation for {silent_verdict}"
+            )
+
+
+# ===================================================================
+# TG 05.3 — apply_cross_checks: D4 (Attribution Check)
+# ===================================================================
+
+
+def _make_d4_record(
+    importance=5,
+    citation_status=CitationStatus.CITED,
+    cite_set=None,
+    vault_verdict="vault_supported",
+    extra_route_verdicts=None,
+    triage_class="general-factual",
+):
+    """Build a record suitable for D4 testing: vault-resolved, cited, important."""
+    record = make_record(claim_text="Some cited claim.", triage_class=triage_class)
+    record.importance = importance
+    record.citation_status = citation_status
+    record.cite_set = cite_set or ["Author 2023"]
+    record.route_verdicts.append(
+        RouteVerdict(
+            route="vault_aligned",
+            verdict=vault_verdict,
+            reasoning="test",
+            provenance="Author 2023",
+        )
+    )
+    if extra_route_verdicts:
+        record.route_verdicts.extend(extra_route_verdicts)
+    return record
+
+
+def _mock_corpus_handler_side_effect():
+    """Returns an AsyncMock that appends a corpus verdict when called."""
+
+    async def _handler(record):
+        rv = RouteVerdict(
+            route="corpus", verdict="corpus_supported", reasoning="found in corpus"
+        )
+        record.route_verdicts.append(rv)
+        return rv
+
+    return AsyncMock(side_effect=_handler)
+
+
+def _mock_web_handler_side_effect():
+    """Returns an AsyncMock that appends a web verdict when called."""
+
+    async def _handler(record):
+        rv = RouteVerdict(
+            route="web", verdict="Supported", reasoning="confirmed by web"
+        )
+        record.route_verdicts.append(rv)
+        return rv
+
+    return AsyncMock(side_effect=_handler)
+
+
+class TestD4AttributionCheck:
+    """D4: vault-resolved + cited + importance >= 4 + corpus available -> corpus check."""
+
+    @pytest.mark.asyncio
+    async def test_d4_vault_resolved_cited_important_gets_corpus(self):
+        """vault_supported + cited + importance=5 + corpus handler -> corpus called."""
+        record = _make_d4_record(importance=5)
+        corpus_handler = _mock_corpus_handler_side_effect()
+        web_handler = _mock_web_handler_side_effect()
+        handlers = {"corpus": corpus_handler, "web": web_handler}
+        manifest = corpus_and_web_manifest()
+
+        await apply_cross_checks([record], manifest, handlers)
+
+        corpus_handler.assert_awaited_once()
+        web_handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_d4_vault_resolved_cited_low_importance_no_corpus(self):
+        """Same setup but importance=3 -> corpus handler NOT called."""
+        record = _make_d4_record(importance=3)
+        corpus_handler = _mock_corpus_handler_side_effect()
+        handlers = {"corpus": corpus_handler, "web": _mock_web_handler_side_effect()}
+        manifest = corpus_and_web_manifest()
+
+        await apply_cross_checks([record], manifest, handlers)
+
+        corpus_handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_d4_citation_free_no_corpus(self):
+        """vault_resolved + citation_free + importance=5 -> NOT called (no attribution)."""
+        record = _make_d4_record(
+            importance=5,
+            citation_status=CitationStatus.CITATION_FREE,
+            cite_set=[],
+        )
+        corpus_handler = _mock_corpus_handler_side_effect()
+        handlers = {"corpus": corpus_handler, "web": _mock_web_handler_side_effect()}
+        manifest = corpus_and_web_manifest()
+
+        await apply_cross_checks([record], manifest, handlers)
+
+        corpus_handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_d4_corpus_already_routed_skipped(self):
+        """vault_resolved + cited + importance=5 but corpus already routed -> NOT called."""
+        record = _make_d4_record(
+            importance=5,
+            extra_route_verdicts=[
+                RouteVerdict(route="corpus", verdict="corpus_supported", reasoning="prior")
+            ],
+        )
+        corpus_handler = _mock_corpus_handler_side_effect()
+        handlers = {"corpus": corpus_handler, "web": _mock_web_handler_side_effect()}
+        manifest = corpus_and_web_manifest()
+
+        await apply_cross_checks([record], manifest, handlers)
+
+        corpus_handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_d4_no_corpus_handler_no_crash(self):
+        """importance=5 + cited but no corpus handler in handlers dict -> no crash."""
+        record = _make_d4_record(importance=5)
+        handlers = {"web": _mock_web_handler_side_effect()}
+        manifest = corpus_and_web_manifest()
+
+        # Should not raise
+        await apply_cross_checks([record], manifest, handlers)
+
+
+# ===================================================================
+# TG 05.3 — apply_cross_checks: D5 (Refutation Confirmation)
+# ===================================================================
+
+
+def _make_d5_record(
+    importance=5,
+    vault_verdict="vault_contradicted",
+    triage_class="general-factual",
+    extra_route_verdicts=None,
+    route="vault_matched",
+):
+    """Build a record suitable for D5 testing: single-tier refutation."""
+    record = make_record(claim_text="A refuted claim.", triage_class=triage_class)
+    record.importance = importance
+    record.route_verdicts.append(
+        RouteVerdict(
+            route=route,
+            verdict=vault_verdict,
+            reasoning="test refutation",
+        )
+    )
+    if extra_route_verdicts:
+        record.route_verdicts.extend(extra_route_verdicts)
+    return record
+
+
+class TestD5RefutationConfirmation:
+    """D5: single-tier refutation + importance >= 4 + web-eligible -> web check."""
+
+    @pytest.mark.asyncio
+    async def test_d5_single_refute_important_gets_web(self):
+        """vault_contradicted only + importance=5 + web-eligible -> web called."""
+        record = _make_d5_record(importance=5)
+        corpus_handler = _mock_corpus_handler_side_effect()
+        web_handler = _mock_web_handler_side_effect()
+        handlers = {"corpus": corpus_handler, "web": web_handler}
+        manifest = corpus_and_web_manifest()
+
+        await apply_cross_checks([record], manifest, handlers)
+
+        web_handler.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_d5_single_refute_low_importance_no_web(self):
+        """Same but importance=3 -> web NOT called."""
+        record = _make_d5_record(importance=3)
+        web_handler = _mock_web_handler_side_effect()
+        handlers = {"corpus": _mock_corpus_handler_side_effect(), "web": web_handler}
+        manifest = corpus_and_web_manifest()
+
+        await apply_cross_checks([record], manifest, handlers)
+
+        web_handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_d5_support_never_triggers_crosscheck(self):
+        """vault_supported + importance=5 -> web handler NOT called (D5 guardrail)."""
+        record = _make_d5_record(importance=5, vault_verdict="vault_supported")
+        web_handler = _mock_web_handler_side_effect()
+        handlers = {"corpus": _mock_corpus_handler_side_effect(), "web": web_handler}
+        manifest = corpus_and_web_manifest()
+
+        await apply_cross_checks([record], manifest, handlers)
+
+        web_handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_d5_never_web_refute_no_escalation(self):
+        """vault_contradicted + importance=5 + triage_class=dataset-dependent -> NOT called."""
+        record = _make_d5_record(importance=5, triage_class="dataset-dependent")
+        web_handler = _mock_web_handler_side_effect()
+        handlers = {"corpus": _mock_corpus_handler_side_effect(), "web": web_handler}
+        manifest = corpus_and_web_manifest()
+
+        await apply_cross_checks([record], manifest, handlers)
+
+        web_handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_d5_web_already_exists_skipped(self):
+        """vault_contradicted + importance=5 but web already in route_verdicts -> NOT called."""
+        record = _make_d5_record(
+            importance=5,
+            extra_route_verdicts=[
+                RouteVerdict(route="web", verdict="Refuted", reasoning="already checked")
+            ],
+        )
+        web_handler = _mock_web_handler_side_effect()
+        handlers = {"corpus": _mock_corpus_handler_side_effect(), "web": web_handler}
+        manifest = corpus_and_web_manifest()
+
+        await apply_cross_checks([record], manifest, handlers)
+
+        web_handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_d5_corpus_refute_gets_web(self):
+        """corpus_contradicted only + importance=5 + web-eligible -> web called."""
+        record = _make_d5_record(
+            importance=5,
+            vault_verdict="corpus_contradicted",
+            route="corpus",
+        )
+        web_handler = _mock_web_handler_side_effect()
+        handlers = {"corpus": _mock_corpus_handler_side_effect(), "web": web_handler}
+        manifest = corpus_and_web_manifest()
+
+        await apply_cross_checks([record], manifest, handlers)
+
+        web_handler.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_d5_web_refute_no_crosscheck(self):
+        """web Refuted + importance=5 -> no additional cross-check (web IS the independent tier)."""
+        record = _make_d5_record(
+            importance=5,
+            vault_verdict="Refuted",
+            route="web",
+        )
+        web_handler = _mock_web_handler_side_effect()
+        handlers = {"corpus": _mock_corpus_handler_side_effect(), "web": web_handler}
+        manifest = corpus_and_web_manifest()
+
+        await apply_cross_checks([record], manifest, handlers)
+
+        web_handler.assert_not_awaited()

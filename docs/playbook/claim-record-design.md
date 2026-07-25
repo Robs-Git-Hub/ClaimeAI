@@ -327,21 +327,109 @@ if manifest.corpus_ids:
 records = await execute_routing(records, manifest, handlers=handlers)
 ```
 
-### Policy table update
+### Policy table update (Phase 04 → superseded by Phase 05)
 
 The `never-web` row's `candidate_routes` changed from `()` to `("corpus",)`
-— the one-line change TG 03.2 anticipated. The `general` (catch-all) row —
-covering `general-factual`, `academic-citable`, and unclassified claims —
-is **unchanged** this phase: it still only offers `"web"`. This is a
-deliberate scope line, not an oversight: house policy from Phase 03 already
-routes web-eligible claims to web; corpus is scoped this phase to claims web
-categorically cannot verify (`novel-result`, `dataset-dependent`). Whether
-web-eligible claims should *also* get a corpus lookup (e.g. as a secondary
-or fallback source) is left for a later phase to decide.
+in Phase 04. In Phase 05, the `general` (catch-all) row's
+`candidate_routes` changed from `("web",)` to `("corpus", "web")` — corpus
+is tried first when declared, web is fallback. This supersedes Decision 44
+("corpus only for never-web").
 
-`_unverifiable_reason` (in `ingest/routing.py`) was adjusted so that its
-non-empty-`candidate_routes` branch also names the record's `triage_class`,
-not just the excluded candidate route(s) — needed once the `never-web` row
-moved from the empty-`candidate_routes` branch to the non-empty one, and
-kept both existing reason-string assertions in `tests/test_routing.py`
-passing unchanged.
+---
+
+## Three-Tier Evidence Cascade (Phase 05, TG 05.1–05.4)
+
+*Appended by the TG 05.4 session — see `ingest/routing.py` (cascade,
+normalization, cross-checks), `ingest/gap_report.py` (conflict detection,
+flags), and `project-management/phase-plans/phase-05-*.md`.*
+
+### Verdict normalization (D6)
+
+Every route verdict maps to one of three normalized values. The function
+`normalize_verdict()` in `ingest/routing.py` is the single source of truth.
+
+| Verdict string | Normalized | Source |
+|---|---|---|
+| `vault_supported` | `support` | vault_aligned, vault_matched |
+| `vault_contradicted` | `refute` | vault_aligned, vault_matched |
+| `not_supported` | `silent` | vault_aligned |
+| `no_vault_match` | `silent` | vault_matched |
+| `note_not_in_vault` | `silent` | vault (gather_evidence) |
+| `insufficient_vault_content` | `silent` | vault (gather_evidence) |
+| `corpus_supported` | `support` | corpus |
+| `corpus_contradicted` | `refute` | corpus |
+| `corpus_insufficient` | `silent` | corpus |
+| `no_corpus_hits` | `silent` | corpus |
+| `Supported` | `support` | web |
+| `Refuted` | `refute` | web |
+| `Insufficient Information` | `silent` | web |
+| `Conflicting Evidence` | `silent` | web |
+| `handler_error` | `silent` | cascade infrastructure |
+| (anything else) | `silent` | future-proofing |
+
+### Cascade routing (D1)
+
+`execute_routing()` runs a multi-round cascade: after concurrent handler
+dispatch, records with silent verdicts are re-decided via `decide_route()`
+(the already-routed check skips the just-attempted tier automatically). Max
+3 rounds. The general row's `candidate_routes=("corpus", "web")` means
+corpus is tried first; web is fallback on silent.
+
+### Citation-aware corpus scoping (D3)
+
+`make_corpus_route_handler(corpus_ids, documents=documents)` resolves
+`record.cite_set` per-claim via `map_citations_to_document_ids()`,
+intersects with declared `corpus_ids`. Empty intersection → whole-scope
+fallback. Scoped searches use `provenance_type="corpus_cited_doc"`.
+
+### Cross-checks (D4, D5)
+
+`apply_cross_checks()` runs after `execute_routing()`, before action
+assignment. Two gates:
+
+| Gate | Condition | Action |
+|------|-----------|--------|
+| D4 (attribution) | vault-resolved + cited + importance ≥ 4 + corpus not yet routed | Scoped corpus check alongside vault verdict |
+| D5 (refutation confirmation) | single-tier refute + importance ≥ 4 + web-eligible + web not yet routed | One web check for independent confirmation |
+
+Supports never trigger cross-checks (cost guardrail).
+
+### Conflict flags (D7)
+
+`detect_conflicts()` in `ingest/gap_report.py` is pure, LLM-free. Two flags:
+
+| Flag | Fires when | Report location |
+|------|-----------|----------------|
+| `source-conflict` | Shared-lineage (vault/corpus) and web disagree (support vs refute) | Per-claim detail, both provenances side by side |
+| `vault-corpus-check-needed` | Vault and corpus disagree (support vs refute) | Vault Improvement Signals section |
+
+Silent or unknown verdicts never trigger flags.
+
+### ClaimRecord additions
+
+| Field | Type | Default | Populated by |
+|-------|------|---------|-------------|
+| `conflict_flags` | `List[str]` | `[]` | Phase 05 (TG 05.4, `detect_conflicts()`) |
+
+### Single-lineage annotation (D8)
+
+Derived at report render time (no stored field). A claim whose only verdicts
+come from shared lineage (vault/corpus routes) and has no independent (web)
+check is annotated "(single-lineage)" in the report. Not applied to trivial
+or unverifiable claims.
+
+### Lineage groups
+
+| Group | Routes |
+|-------|--------|
+| Shared | `vault_aligned`, `vault_matched`, `corpus` |
+| Independent | `web` |
+
+Vault and corpus share one lineage (vault derived from corpus sources).
+Cross-checks (D5) use web, never vault↔corpus — confirming one against the
+other is circular (the 98-votes case proved this in practice).
+
+### `assign_suggested_actions` priority update
+
+`source-conflict` in `conflict_flags` → `REVISE_CLAIM` as top priority,
+before vault_contradicted. A source-conflict outranks individual verdicts.

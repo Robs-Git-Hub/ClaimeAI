@@ -1,45 +1,35 @@
 # Session Handover
 
-**Last Updated:** 2026-07-25 (Session 10, outgoing)
-**Current Status:** Phase 04 COMPLETE. Phase 05 (Three-Tier Evidence Cascade) APPROVED — no implementation yet.
+**Last Updated:** 2026-07-25 (Session 11, outgoing)
+**Current Status:** Phase 05 TGs 05.1–05.4 COMPLETE (implementation + tests). TG 05.5 milestone PARTIAL — cascade demonstrated live, source-conflict flag not demonstrated (needs cited test file).
 
 ---
 
 ## Start Here
 
-**Outgoing session completed:** Phase 04 wrapped. 3 of 4 papers ingested into prod corpus (Zeng 2026 blocked by null-byte backend bug). Live milestone run verified corpus infrastructure end-to-end. Design review of routing policy identified corpus-only-for-never-web as too narrow — user approved Phase 05: three-tier evidence cascade (vault→corpus→web), citation-aware scoping, importance-gated cross-checks, and source-conflict detection. Phase 05 plan written and approved; no implementation started.
+**Outgoing session completed:** Phase 05 implementation (68 new tests, 471 total). Three-tier evidence cascade (vault→corpus→web) fully operational: `normalize_verdict()`, cascade in `execute_routing()`, citation-aware corpus scoping, D4/D5 importance-gated cross-checks, pure-code conflict detection with `source-conflict` and `vault-corpus-check-needed` flags, single-lineage annotations in gap report. Live milestone run: 17 claims, 11 vault-resolved, 5 corpus, 1 web, ~2 min. Source-conflict flag tested offline (13 tests) but not demonstrated live — requires a cited test file whose wikilinks map to corpus documents.
 
 **Incoming session should:**
 
-1. **Implement Phase 05** (plan at `phase-plans/phase-05-three-tier-evidence-cascade.md`). Five TGs:
-   - TG 05.1: Cascade routing — `decide_route`/`execute_routing` re-decision on silent verdicts; general row candidates → `("corpus", "web")`
-   - TG 05.2: Citation-aware corpus scoping — cite-sets resolve to `document_ids` via `map_citations_to_document_ids()`
-   - TG 05.3: Importance-gated cross-checks — D4 (attribution check for cited importance ≥ 4) and D5 (web confirmation for single-tier refutations)
-   - TG 05.4: Conflict detection + flags — pure-code normalization (support/refute/silent), `source-conflict` and `vault-corpus-check-needed` flags, single-lineage annotation
-   - TG 05.5: Milestone — live heavy run; 98-votes case must surface as `source-conflict` (corpus says 98, web says 93)
+1. **Create a cited test file** for source-conflict demonstration. Add wikilink citations to `ukraine-intro-test.txt` (or create a new file) — e.g., the "98 votes" sentence needs `[[de Carvalho 2025]]` so D4 fires. The citation must map to corpus document `d_7lRaRsrtAJOW` via `map_citations_to_document_ids()`. Then re-run the milestone and verify `source-conflict` appears in the report.
 
-2. **Key design decisions (D1–D9)** are in the plan. The critical ones:
-   - Vault and corpus share one lineage; web is the only independent source. Cross-checks must use web, never vault↔corpus.
-   - Conflict flags fire only on clear support-vs-refute disagreement; silent/ambiguous never triggers.
-   - Supports never trigger routine cross-checks (D5 cost guardrail).
+2. **Critical config notes for milestone run:**
+   - `--vault` path must be the vault ROOT (`vault-main`), NOT `vault-main/v-research` — `load_vault()` appends `v-research` internally. Wrong path silently produces zero vault notes.
+   - `--argument-pyramid` value must be `un-ukraine-russia-war-votes-working-paper` (changed from `ukraine-vote` in the sibling vault repo).
+   - Working command: `poetry run python scripts/run_heavy.py workspace/inbox/ukraine-intro-test.txt --vault "PATH/vault-main" --argument-pyramid un-ukraine-russia-war-votes-working-paper --corpus-ids d_o3qBk5fESO_q,d_7ZUo22uPGdsf,d_7lRaRsrtAJOW`
 
-3. **Zeng 2026 ingestion** — check if doc-rag-backend has fixed the null-byte bug (cross-repo note at `docs-meta/client-needs/2026-07-25-claimeai-null-byte-ingestion-failure.md`, repro PDF at `data/repro-cases/`). If fixed, re-ingest and add its document_id to the milestone corpus-ids. Not a blocker — de Carvalho 2025 carries the 98-votes conflict case.
+3. **Update `docs/websearch-and-costs.md`** with corpus cost profile (~$0.01–0.02/claim: self-hosted search ~$0, mid summarize + high evaluate). Record Session 11 milestone run cost and wall-clock.
 
-**Corpus document IDs (prod, live):**
+4. **Decide whether Phase 05 closes** on cited-test-file demonstration or on infrastructure evidence (471 tests, cascade live-verified, conflict mechanism unit-tested). If closing, update TASKS.md and HANDOVER.md, push to origin.
 
-| Document ID | Title | Status |
-|---|---|---|
-| `d_o3qBk5fESO_q` | Nurullayev & Papa 2023 | Ingested, hybrid search verified |
-| `d_7ZUo22uPGdsf` | Kim 2023 | Ingested, hybrid search verified |
-| `d_7lRaRsrtAJOW` | de Carvalho 2025 | Ingested, hybrid search verified |
-| — | Zeng 2026 | Blocked (null-byte bug in backend span insertion) |
+5. **Zeng 2026 ingestion** — check if doc-rag-backend has fixed the null-byte bug. If fixed, re-ingest and add document_id to corpus-ids.
 
 **What was NOT done:**
-- **Phase 05 implementation** — plan approved, zero code written.
-- **`docs/websearch-and-costs.md`** — not updated with corpus cost profile (deferred to Phase 05 wrap, TG 05.5).
-- **Light-profile regression** — not run end-to-end (offline test covers it).
+- **Source-conflict live demonstration** — mechanism implemented and tested, but no test file triggers D4 (citation-aware corpus check alongside vault). Needs a wikilinked test file.
+- **`docs/websearch-and-costs.md`** — corpus cost profile not added.
+- **Light-profile regression** — not run end-to-end (offline tests cover it; 471 pass).
 
-**Phase plans:** `phase-02-vault-verification-core.md` (COMPLETE), `phase-03-triage-and-routing.md` (COMPLETE), `phase-04-corpus-rag-route.md` (COMPLETE), `phase-05-three-tier-evidence-cascade.md` (APPROVED)
+**Phase plans:** `phase-02-vault-verification-core.md` (COMPLETE), `phase-03-triage-and-routing.md` (COMPLETE), `phase-04-corpus-rag-route.md` (COMPLETE), `phase-05-three-tier-evidence-cascade.md` (IMPLEMENTATION COMPLETE, MILESTONE PARTIAL)
 
 ---
 
@@ -68,7 +58,7 @@ Agent packages at root: `claim_extractor/`, `claim_verifier/`, `fact_checker/`, 
 
 ### API keys configured (.env at repo root)
 
-All present: `OPENAI_API_KEY` (sk-proj-, **OUT OF CREDIT as of Session 5**), `EXA_API_KEY` (UUID, verified live), `OPENROUTER_API_KEY` (sk-or-v1, verified live), `TAVILY_API_KEY` (tvly-dev-, verified live), `REDIS_URI` + `REDIS_URL` (both redis://localhost:6379, Redis optional for local dev), `RAG_API_KEY` (64-char hex, provisioned Session 9, verified live against api.ragtogo.com — `GET /documents` returned 200).
+All present: `OPENAI_API_KEY` (sk-proj-, topped up Session 10), `EXA_API_KEY` (UUID, verified live), `OPENROUTER_API_KEY` (sk-or-v1, verified live), `TAVILY_API_KEY` (tvly-dev-, verified live), `REDIS_URI` + `REDIS_URL` (both redis://localhost:6379, Redis optional for local dev), `RAG_API_KEY` (64-char hex, provisioned Session 9, verified live).
 
 ### Model tier mapping (current, from config.toml)
 
@@ -88,31 +78,25 @@ All present: `OPENAI_API_KEY` (sk-proj-, **OUT OF CREDIT as of Session 5**), `EX
 | Session 4 | OpenAI | Exa | 448 claims (ukraine paper), ~$10 cost |
 | Session 5 | OpenAI | Exa | FAILED (429 insufficient_quota) |
 | Session 5 | OpenRouter | Exa | 15 claims (ukraine-intro-test.txt), 10 supported / 5 refuted |
-| Session 7 | OpenRouter | — | Vault alignment + matching spot-check: 3 vault_supported, 9 vault_supported (matching), 4 note_not_in_vault. 13 API calls. |
+| Session 7 | OpenRouter | -- | Vault alignment + matching spot-check: 3 vault_supported, 9 vault_supported (matching), 4 note_not_in_vault. 13 API calls. |
 | Session 8 run 1 | OpenRouter | Exa | Phase 03 milestone (pre-triage-fix): 15 claims, 3 web / 12 unverifiable. |
 | Session 8 run 2 | OpenRouter | Exa | Post-triage-fix: 15 claims, 14 web / 1 trivial. "98 votes" Refuted by web. |
 | Session 8 run 3 | OpenRouter | Exa | Post-parallelization: 11 claims (extraction variance), ~4 min. |
 | Session 8 run 4 (final) | OpenRouter | Exa | 15 claims, 8 vault-resolved / 7 web. "98 votes" caught by vault. ~4 min. |
-| Session 9 | — | — | api.ragtogo.com: `/health` verified (healthy), `/documents` authenticated (200). 4 PDFs uploaded + ingestion FAILED (backend OpenAI key out of quota at embedding stage). Doc rows created, all stages None. |
-| Session 10 | OpenAI | Exa | Phase 04 milestone: 16 claims, 11 vault-resolved, 5 web-checked, 23 Exa searches, ~2 min. Corpus wired + available but 0 claims routed to it (correct: no dataset-dependent claims). "98 votes" Refuted (93), "more than 40 countries" Refuted (exactly 40). |
+| Session 9 | -- | -- | api.ragtogo.com: `/health` verified, `/documents` authenticated. 4 PDFs uploaded + ingestion FAILED (backend OpenAI key out of quota). |
+| Session 10 | OpenAI | Exa | Phase 04 milestone: 16 claims, 11 vault-resolved, 5 web-checked. Corpus wired but 0 claims routed to it. |
+| Session 11 | OpenAI | Exa | Phase 05 milestone: 17 claims, 11 vault-resolved, 5 corpus, 1 web (cascade: corpus→web). ~2 min. Source-conflict not triggered (no cited claims in test file). |
 
 ### Key decisions made
 
-1–40: See Session 8 handover (preserved in git history).
-41. **Phase 04 plan approved** (Session 9). Prod-first, cross-repo commits approved, find-or-generate API key authorized.
-42. **Router extensibility validated by second real route** (Session 9). Gap report, execute_routing, ClaimRecord untouched — pillar 3 confirmed. Design finding: `VerificationResult` enum in claim_verifier can't express richer verdict vocabularies (e.g. `corpus_insufficient`), so routes with richer vocabularies use route-local evaluation (following `ingest/alignment.py` pattern).
-43. **Corpus handler uses factory pattern** (Session 9). `make_corpus_route_handler(corpus_ids)` solves the manifest-scoping problem without changing `RouteHandler` protocol or `execute_routing` signature.
-44. ~~**Corpus route only for never-web claims this phase**~~ (Session 9). **SUPERSEDED by Decision 48** (Session 10). Was a deliberate scope line; now replaced by three-tier cascade.
-45. **Eval-seed papers are dirty test copies** (Session 9 user correction). Clean originals ingested from ukraine-vote-analysis repo + Zotero storage instead.
-46. **SSH access established from this Windows machine** (Session 9). ed25519 key at `~/.ssh/id_ed25519`, authorized via Hetzner console. `clip.exe` piping for long one-liners.
-47. **Fresh DOC_RAG_API_KEY provisioned** (Session 9). 64-char hex generated, set in `/home/app/doc-rag-backend/code/.env.production.local`, container recreated. Stored as `RAG_API_KEY` in ClaimeAI `.env`.
-48. **Three-tier evidence cascade approved** (Session 10). Vault→corpus→web cascade replaces corpus-only-for-never-web. Nine design decisions (D1–D9) in `phase-plans/phase-05-three-tier-evidence-cascade.md`. Key principles: vault+corpus share one lineage (web is the only independent source); cross-checks use web, never vault↔corpus; conflict flags fire only on clear support-vs-refute; supports never trigger routine cross-checks.
-49. **Phase 04 closed on infrastructure evidence** (Session 10). TG 04.4.2 milestone as specified was unsatisfiable (Session 8 triage fix means no dataset-dependent claims in test file). Phase 04 closes on what Session 10 verified: corpus wired end-to-end, hybrid search live, 3 papers ingested. Live corpus-route exercise moved to Phase 05's stronger milestone.
-50. **OpenAI account topped up** (Session 10, user action). Ingestion and milestone run used OpenAI successfully.
+1–50: See Session 10 handover (preserved in git history).
+51. **Vault `argument_pyramid` tag renamed** (Session 11 discovery). Vault notes changed from `ukraine-vote` to `un-ukraine-russia-war-votes-working-paper`. CLI `--argument-pyramid` must match current vault frontmatter exactly — mismatch silently loads zero notes.
+52. **`load_vault()` path convention** (Session 11 discovery). Pass the vault ROOT (e.g. `vault-main`), not the research subdirectory. The function appends `v-research` internally. Wrong path silently produces zero vault notes (no error raised).
+53. **Source-conflict requires cited claims** (Session 11 finding). D4 attribution check (the only path to both corpus and web verdicts on the same claim) requires `citation_status == CITED`. Citation-free test files can demonstrate the cascade but not the conflict flags.
 
 ### Test suite
 
-403 tests total (400 pass with `-m "not slow"`, 3 slow tests deselected).
+471 tests total (468 pass with `-m "not slow"`, 3 slow tests).
 
 | File | Count | Covers |
 |------|-------|--------|
@@ -121,45 +105,54 @@ All present: `OPENAI_API_KEY` (sk-proj-, **OUT OF CREDIT as of Session 5**), `EX
 | test_ingest.py | 31 | PDF extraction, chunking, text dispatch, report rendering |
 | test_cost_tracking.py | 12 | Search cost counter, estimates, free-tier balance, print_summary |
 | test_config.py | 10 | TOML loading, sections, fallbacks, real config.toml validation, corpus_api section |
-| test_claim_record.py | 26 | ClaimRecord, enums incl. CorpusVerdict, DraftPosition, RouteVerdict, serialization |
+| test_claim_record.py | 28 | ClaimRecord, enums incl. CorpusVerdict, conflict_flags, DraftPosition, RouteVerdict, serialization |
 | test_run_config.py | 24 | ResourceManifest, RunProfile, available_routes incl. corpus, vault-less degradation |
 | test_draft_parser.py | 25 | Wikilink parsing, stripping, author-year detection, sentence splitting, ParsedDraft |
 | test_citation_binder.py | 15 | Citation binding via original_index, union semantics, decomposition survival |
 | test_vault_serializer.py | 24 | Vault note parsing, filtering, serialization, token counting (22 narrow + 2 slow) |
 | test_alignment.py | 22 | gather_evidence (8), evaluate_alignment (12 + 2 fallback) |
 | test_vault_match.py | 42 | batch_match_claims, verify_matches, fallback, supersede, keywords, contradiction |
-| test_gap_report.py | 18 | assign_suggested_actions, render_gap_report, serialize_results, route summary |
+| test_gap_report.py | 33 | assign_suggested_actions, render_gap_report, serialize_results, detect_conflicts, source-conflict rendering, single-lineage annotation |
 | test_triage.py | 13 | Batch triage, conservative fallback, importance clamping, prompt content |
-| test_routing.py | 27 | Policy rows, extensibility proof, web handler, execute_routing, routing reasons |
+| test_routing.py | 72 | Policy rows, cascade (normalize_verdict, execute_routing multi-round), D4/D5 cross-checks, extensibility proof |
 | test_evidence_summarization.py | 11 | On/off switch, extract mapping, refuting content, fallback paths |
 | test_corpus_client.py | 22 | Search request/response, pagination, citation mapping, degradation |
-| test_corpus_route.py | 15 | Handler verdicts, provenance, factory wiring, manifest gating, tier assertion |
-| test_orchestration.py | 23 | Pipeline composition, no-vault degrade, corpus wiring, CLI parsing |
+| test_corpus_route.py | 23 | Handler verdicts, provenance, factory wiring, citation-aware scoping, manifest gating |
+| test_orchestration.py | 25 | Pipeline composition, no-vault degrade, corpus wiring with documents, CLI parsing, cross-checks wiring |
 | test_ingest.py (slow) | 1 | Docling PDF extraction (~16s) |
 
-### Phase 04 new files (Session 9)
+### Phase 05 new/modified files (Session 11)
 
-| File | Purpose |
+| File | Changes |
 |------|---------|
-| `ingest/corpus_client.py` | HTTP client: search_corpus(), list_documents(), map_citations_to_document_ids() |
-| `ingest/corpus_route.py` | Route handler: make_corpus_route_handler(corpus_ids) factory, route-local high-tier evaluation |
-| `tests/test_corpus_client.py` | Corpus client offline tests (httpx.MockTransport) |
-| `tests/test_corpus_route.py` | Corpus route handler tests (mocked LLM + client) |
-| `project-management/phase-plans/phase-04-corpus-rag-route.md` | Phase 04 plan |
+| `ingest/routing.py` | +306 lines: `normalize_verdict()`, `_is_cascade_silent()`, cascade in `execute_routing()`, `_redecide()`, `apply_cross_checks()` with `_needs_d4()`/`_needs_d5()` |
+| `ingest/corpus_route.py` | +89 lines: `documents` param on factory, `_resolve_search_scope()`, `corpus_cited_doc` provenance type |
+| `ingest/gap_report.py` | +172 lines: `detect_conflicts()`, `_opposing()`, `_is_single_lineage()`, `_render_source_conflict()`, vault-corpus mismatch section |
+| `utils/claim_record.py` | +9 lines: `conflict_flags: List[str]` field |
+| `scripts/run_heavy.py` | +25 lines: `list_documents()` pre-fetch, `apply_cross_checks()` wiring, `detect_conflicts()` wiring |
+| `docs/playbook/claim-record-design.md` | Phase 05 section: normalization table, lineage groups, conflict flags, cross-check gates |
+| `CLAUDE.md` | Pipeline section rewritten for cascade |
 
-### Hetzner / doc-rag-backend state (Session 9)
+### Hetzner / doc-rag-backend state (Session 9, unchanged)
 
 | Item | Status |
 |------|--------|
 | Server | `ubuntu-8gb-hel1-1`, healthy, SSH on port 49152 |
-| Compose dir | `/home/app/doc-rag-backend/code/` (NOT `/opt/doc-rag-backend` — HANDOVER was stale) |
+| Compose dir | `/home/app/doc-rag-backend/code/` |
 | App container | `code-app-1`, healthy |
-| Supabase prod | `prod-ragtogo` (ref `rmxgiszgfycfwlfurdvu`), was paused (auto-pause), unpaused Session 9 |
+| Supabase prod | `prod-ragtogo` (ref `rmxgiszgfycfwlfurdvu`) |
 | Pinecone prod | `doc-rag-prod` (1536 dims, serverless) |
-| DOC_RAG_API_KEY | Provisioned and deployed Session 9 (64-char hex in `.env.production.local`) |
-| PDFs uploaded | 4 files at `/home/app/doc-rag-backend/code/pdfs/` (mapped to `/data/pdfs/` in container) |
-| Ingestion | Initiated via POST /documents at session end — **completion unconfirmed** |
-| Backend repo | Cloned at `../doc-rag-backend`; client-needs note committed to origin/dev (463c155) |
+| DOC_RAG_API_KEY | Provisioned Session 9 (64-char hex) |
+| Ingestion | 3 of 4 papers ingested; Zeng 2026 blocked by null-byte bug |
+
+**Corpus document IDs (prod, live):**
+
+| Document ID | Title | Status |
+|---|---|---|
+| `d_o3qBk5fESO_q` | Nurullayev & Papa 2023 | Ingested, hybrid search verified |
+| `d_7ZUo22uPGdsf` | Kim 2023 | Ingested, hybrid search verified |
+| `d_7lRaRsrtAJOW` | de Carvalho 2025 | Ingested, hybrid search verified |
+| -- | Zeng 2026 | Blocked (null-byte bug in backend) |
 
 ---
 
@@ -168,12 +161,13 @@ All present: `OPENAI_API_KEY` (sk-proj-, **OUT OF CREDIT as of Session 5**), `EX
 | Date | What was done |
 |------|---------------|
 | 2026-07-22 | Session 1: Fork, clone, PM setup, assessment artifact, websearch-and-costs doc |
-| 2026-07-22 | Session 2: Flatten to agent-only, OpenRouter + tier-based registry, PDF ingest (Docling), /claimify skill, NLTK fix, OpenAI live test, tier rebalancing, model selection playbook, Sonnet 5 hybrid-reasoning correction. 63 tests. 13 commits. |
-| 2026-07-23 | Session 3: Reasoning effort fix, search cost tracking, dead export cleanup, config.toml extraction, OpenRouter live test, Exa vs Tavily comparison, architecture audit. 87 tests. 7 commits. |
-| 2026-07-23 | Session 4: Emoji fix in dev.py, design discussion on academic verification scope, Phase 02 plan written, first full academic paper PDF test (448 claims, $10 cost with analysis). |
-| 2026-07-23 | Session 5: Phase 01 closed. Phase 02 approved. Standard dev test file established. Vault corrections: 98->93 across 9 notes. 4 commits. |
-| 2026-07-23 | Session 6: Phase 02 TGs 02.1–02.3 implemented. Data models, draft parsing + citation binding, vault serializer. 107 new tests (195 total). |
-| 2026-07-23 | Session 7: Phase 02 TGs 02.4–02.6 implemented. Cited-claim alignment, citation-free vault matching, gap report. Live spot-check passed. 50 new tests (245 total). 3 commits. |
-| 2026-07-24 | Session 8: Phase 02 CLOSED. Phase 03 planned, implemented, milestone-accepted. TGs 03.1–03.6. ~95 new tests (340 total). |
-| 2026-07-24 | Session 9: Phase 04 planned (Fable + 3 Haiku explorers), approved, and TGs 04.1–04.4.1 implemented. doc-rag-backend cloned, SSH established, API key provisioned, Supabase unpaused, 4 clean PDFs uploaded + ingestion initiated. Cross-repo client-needs note. 60 new tests (400 total). Milestone deferred to incoming session (ingestion completion unconfirmed). |
-| 2026-07-25 | Session 10: OpenAI topped up. 3 of 4 papers ingested (Zeng 2026 blocked by null-byte backend bug — cross-repo repro case committed). Hybrid search verified. Phase 04 milestone run: 16 claims, 11 vault-resolved, 5 web. Design review: corpus-only-for-never-web identified as too narrow; Phase 05 (Three-Tier Evidence Cascade) designed and approved — vault→corpus→web cascade, citation-aware scoping, importance-gated cross-checks, source-conflict detection. Phase 04 CLOSED. 403 tests (unchanged). |
+| 2026-07-22 | Session 2: Flatten to agent-only, OpenRouter + tier-based registry, PDF ingest, /claimify skill, NLTK fix, OpenAI live test. 63 tests. |
+| 2026-07-23 | Session 3: Reasoning effort fix, search cost tracking, config.toml extraction, OpenRouter live test, architecture audit. 87 tests. |
+| 2026-07-23 | Session 4: Phase 02 plan written, first full academic paper PDF test (448 claims, $10 cost). |
+| 2026-07-23 | Session 5: Phase 01 closed. Phase 02 approved. Standard dev test file established. |
+| 2026-07-23 | Session 6: Phase 02 TGs 02.1–02.3 implemented. Data models, draft parsing, vault serializer. 195 tests. |
+| 2026-07-23 | Session 7: Phase 02 TGs 02.4–02.6 implemented. Alignment, vault matching, gap report. Live spot-check. 245 tests. |
+| 2026-07-24 | Session 8: Phase 02 CLOSED. Phase 03 implemented and milestone-accepted. 340 tests. |
+| 2026-07-24 | Session 9: Phase 04 implemented. doc-rag-backend cloned, SSH, API key, ingestion initiated. 400 tests. |
+| 2026-07-25 | Session 10: Phase 04 CLOSED. Phase 05 designed and approved. 403 tests. |
+| 2026-07-25 | Session 11: Phase 05 TGs 05.1–05.4 implemented. Cascade routing, citation-aware scoping, D4/D5 cross-checks, conflict detection. Live milestone (cascade verified, source-conflict pending cited test file). 471 tests. |
