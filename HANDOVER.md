@@ -16,7 +16,7 @@
 
 **Incoming session should:**
 
-1. **Phase 06 planning** (Deep Research Commissions) — the backlog is clear and the pipeline is stable at 523 tests.
+1. **Phase 06 planning** (Claude-Native Web Search) — replace Exa/Tavily with a `claude` search provider using WebSearch + WebFetch from the Max plan. See TASKS.md roadmap for direction, tradeoffs, and approach. The `web-interaction` skill (`.claude/skills/web-interaction/`) documents all 7 available web methods. Original "Deep Research Commissions" phase renumbered to 07.
 2. **Exa may still be OUT OF CREDITS** (402 NO_MORE_CREDITS observed Session 12; $10/month auto-refresh). config.toml committed default is `exa` — flip to `tavily` locally if Exa credits haven't refreshed. Tavily verified working (1,000 free credits/month).
 3. **Remaining backlog items** (lower priority):
    - Vault aliases lint in sibling repo (ClaimeAI side done: `build_vault_index()` indexes aliases)
@@ -29,7 +29,7 @@
 - `--argument-pyramid` value must be `un-ukraine-russia-war-votes-working-paper` for the real vault.
 - Real-vault command (4 corpus papers): `poetry run python scripts/run_heavy.py workspace/inbox/ukraine-intro-cited-test.md --vault "PATH/vault-main" --argument-pyramid un-ukraine-russia-war-votes-working-paper --corpus-ids d_o3qBk5fESO_q,d_7ZUo22uPGdsf,d_7lRaRsrtAJOW,d_ZikkNbPZFWWV`
 
-**Phase plans:** `phase-02` through `phase-05` all COMPLETE. Phase 05 plan carries Amendment (Session 12) for D10 and Resolved (Session 13) for Risk 1 (importance clustering).
+**Phase plans:** `phase-02` through `phase-05` all COMPLETE. Phase 05 plan carries Amendment (Session 12) for D10 and Resolved (Session 13) for Risk 1 (importance clustering). Phase 06 (Claude-Native Web Search) direction approved Session 13 — plan to be written next session.
 
 ---
 

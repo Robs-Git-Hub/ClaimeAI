@@ -407,10 +407,11 @@ Sibling repo fixed null-byte bug (PUA chars from Docling), re-ingested Zeng 2026
 
 ---
 
-## Phases 06–07: Roadmap — FUTURE
+## Phases 06–08: Roadmap — FUTURE
 
-- **Phase 06 — Deep Research Commissions:** human-approved escalation, commission writer, response-paper ingestion + re-evaluation
-- **Phase 07 — Draft Update Loop:** propose citation-inserting draft edits after vault improvement
+- **Phase 06 — Claude-Native Web Search:** Replace Exa/Tavily with a Claude Code search provider that uses WebSearch + WebFetch (included in the $200/mo Max plan). Eliminates two external search API dependencies. Direction: reverse-engineer Exa/Tavily search-and-extract flows, build a `claude` search provider behind the existing `search_provider` config switch, spike on the standard test file against Exa baseline verdicts. Key tradeoff: speed (~1s API calls → ~15–30s sub-agent calls; acceptable for research tool, not real-time). Approach: start with Option 3 (direct tool-use via Anthropic API, no sub-agent overhead) before falling back to sub-agent orchestration. The `web-interaction` skill documents 7 available methods — WebSearch + WebFetch is the primary path; playwright-cli / Chrome MCP are fallbacks for JS-heavy or Cloudflare-blocked pages.
+- **Phase 07 — Deep Research Commissions:** human-approved escalation for unresolvable claims, commission writer, response-paper ingestion + re-evaluation (was Phase 06 before the search-provider pivot)
+- **Phase 08 — Draft Update Loop:** propose citation-inserting draft edits after vault improvement
 
 **Edge-case backlog:** PDF-only drafts / plain-text citation parsing; source fetching for absent papers; vault-less heavy runs; vault QA / chain completeness (verify vault notes against original sources — separate domain from draft-claim verification, likely reuses doc-rag-backend); semi-automated vault enrichment; vault-side aliases lint (every SOURCE note carries an "Author Year" alias so hand-written wikilinks resolve — ClaimeAI side landed Session 12 as `build_vault_index()`); sibling-repo prod-DB cleanup (4 dead Session-9 document shells + 2 ArXiv test docs observed Session 13); retrieve_evidence still can't distinguish search-API errors (e.g. 402) from genuine zero results — both return empty evidence and now yield INSUFFICIENT (correct verdict since Session 13, but error-vs-empty telemetry would help spot dead providers faster)
 
