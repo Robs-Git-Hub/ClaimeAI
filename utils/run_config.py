@@ -39,6 +39,10 @@ class ResourceManifest(BaseModel):
     vault_path: Optional[Path] = Field(
         default=None, description="Path to Obsidian vault root"
     )
+    research_dir: str = Field(
+        default="v-research",
+        description="Subdirectory under vault_path containing .md notes",
+    )
     argument_pyramid: Optional[str] = Field(
         default=None, description="Vault filter (frontmatter value)"
     )

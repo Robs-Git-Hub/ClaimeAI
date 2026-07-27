@@ -242,7 +242,7 @@ def _fallback_load_vault(filtered_notes, full_notes):
     """A load_vault stand-in that returns ``filtered_notes`` when called with
     an argument_pyramid filter, and ``full_notes`` for the unfiltered call."""
 
-    def _side_effect(vault_path, argument_pyramid=None, evidence_types=None):
+    def _side_effect(vault_path, research_dir="v-research", argument_pyramid=None, evidence_types=None):
         if argument_pyramid is not None:
             return filtered_notes
         return full_notes

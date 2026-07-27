@@ -184,11 +184,14 @@ async def run_pipeline(
         try:
             filtered_notes = load_vault(
                 manifest.vault_path,
+                research_dir=manifest.research_dir,
                 argument_pyramid=manifest.argument_pyramid,
                 evidence_types=DEFAULT_EVIDENCE_TYPES,
             )
             filtered_vault = build_vault_index(filtered_notes)
-            full_vault = build_vault_index(load_vault(manifest.vault_path))
+            full_vault = build_vault_index(
+                load_vault(manifest.vault_path, research_dir=manifest.research_dir)
+            )
             serialized = serialize_vault(filtered_notes)
         except Exception as exc:  # noqa: BLE001
             record_failure("load_vault", exc)
@@ -372,6 +375,11 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--vault", type=Path, default=None, help="Path to the Obsidian vault root"
     )
     parser.add_argument(
+        "--research-dir",
+        default="v-research",
+        help="Subdirectory under vault root containing .md notes (default: v-research)",
+    )
+    parser.add_argument(
         "--argument-pyramid",
         default=None,
         help="Vault frontmatter filter (argument_pyramid value)",
@@ -447,6 +455,7 @@ def _build_manifest(args: argparse.Namespace) -> ResourceManifest:
     return ResourceManifest(
         draft_path=draft_path,
         vault_path=vault_path,
+        research_dir=args.research_dir,
         argument_pyramid=args.argument_pyramid if vault_path is not None else None,
         corpus_ids=_parse_corpus_ids(args.corpus_ids),
         web_enabled=not args.no_web,
