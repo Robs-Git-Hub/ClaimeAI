@@ -1,35 +1,25 @@
 # Session Handover
 
-**Last Updated:** 2026-07-27 (Session 17, outgoing)
+**Last Updated:** 2026-07-27 (Session 18, outgoing)
 **Current Status:** Phases 01–05 COMPLETE. Phase 06 DEFERRED (D60).
 
 ---
 
 ## Start Here
 
-**Outgoing session completed:** Session 17 — Global `/fact-check` skill, `--research-dir` CLI flag, vault requirements reference.
+**Outgoing session completed:** Session 18 — Mac environment setup, live smoke test, global skill install.
 
-- Created global skill `~/.claude/skills/fact-check/` — any repo can invoke ClaimeAI by declaring a `## Fact-Checking` section in its CLAUDE.md (vault_path, research_dir, argument_pyramid, corpus_ids)
-- Added `--research-dir` flag to `run_heavy.py` + `ResourceManifest.research_dir` field — vaults no longer require `v-research/` as the subfolder name (default unchanged)
-- Wrote `references/vault-requirements.md` — full spec of what the pipeline expects from a vault (frontmatter fields, note naming, link traversal, type filtering, silent degradation modes)
-- Platform-aware skill (Windows + macOS paths) — backed up to multi-repo with manifest entry
-- 520 tests pass
+- Mac environment bootstrapped: Poetry 2.2.1 + Python 3.12, all deps installed, 520 tests pass (18s)
+- langgraph-cli pinned to 0.4.8 (same version-compat fix as Windows — latest langgraph-api 0.11.x is incompatible with langgraph 0.4.x)
+- Global `/fact-check` skill installed from multi-repo backup (cloned `Robert-Repos/claude-multi-repo-instructions-and-lessons` to Mac)
+- Exa credits topped up — live smoke test passed: 3 Apollo 11 claims, all Supported via Exa search
+- LangGraph dev server left running at `http://127.0.0.1:2024` (may need restart if Mac sleeps)
 
-**Incoming session — Mac setup task:**
-
-Copy the global fact-check skill from the multi-repo backup to the Mac's global skills directory:
-```bash
-cp -r ~/Documents/GitHub/Robert-Repos/claude-multi-repo-instructions-and-lessons/skills/fact-check \
-      ~/.claude/skills/fact-check
-```
-This installs `/fact-check` globally so it works from any repo on the Mac.
-
-**Next task:** Decide what to work on — the pipeline is functionally complete (523 tests, live-verified cascade). Options:
+**Next task:** Decide what to work on — the pipeline is functionally complete (520 tests, live-verified on Mac). Options:
 
 1. Use the pipeline on real work (fact-check a draft — the global `/fact-check` skill is ready)
 2. Phase 07 (deep research commissions) or Phase 08 (draft update loop)
 3. PixSerp integration as a cheap Exa alternative (narrow scope)
-4. Buy Exa credits (committed config default is `exa`; 402 errors clear once account has credit; Tavily free tier fallback)
 
 **Full plans:** `project-management/phase-plans/` (01–05 all COMPLETE). Phase 06 decision record: `project-management/phase-plan-notes/phase-06/phase-06-search-provider-decision.md`.
 
@@ -39,12 +29,13 @@ This installs `/fact-check` globally so it works from any repo on the Mac.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Python | 3.11.15 via uv | |
-| Poetry | 2.4.1 | `uv tool install poetry` |
-| Venv | `C:\vpy\claime-agent-j1KWVyi4-py3.11` | |
+| Python | 3.12.12 via Homebrew (Mac) | Windows: 3.11.15 via uv |
+| Poetry | 2.2.1 (Mac) | Windows: 2.4.1 |
+| Venv | `claime-agent-AcjO-nnN-py3.12` (Mac) | Windows: `C:\vpy\claime-agent-j1KWVyi4-py3.11` |
 | Dev server | `poetry run dev` | Light profile only; heavy runs in-process |
+| langgraph-cli | Pinned 0.4.8 | Latest (0.4.31) breaks with langgraph 0.4.x |
 | Tests | 523 (520 fast, 3 slow) | `pytest -m "not slow"` |
-| Exa | Exhausted (402) | Buy credits or switch to Tavily |
+| Exa | Active (credits topped up 2026-07-27) | Live-verified on Mac |
 
 ---
 
@@ -64,6 +55,7 @@ This installs `/fact-check` globally so it works from any repo on the Mac.
 
 | Session | Date | What was done |
 |---------|------|---------------|
+| 18 | 2026-07-27 | Mac environment setup (Python 3.12, langgraph-cli pin). Global `/fact-check` skill installed. Exa live-verified. |
 | 17 | 2026-07-27 | Global `/fact-check` skill (platform-aware, CLAUDE.md config). `--research-dir` CLI flag. Vault requirements reference. |
 | 16 | 2026-07-25 | Cross-repo usage playbook, `/claimify` skill update (both profiles), multi-repo backup+manifest, HANDOVER trim. |
 | 15 | 2026-07-25 | Phase 06 DEFERRED. Market scan (7 providers). PixSerp evaluated (32 live calls). Query-design playbook. crawl4ai documented. |
@@ -76,6 +68,9 @@ This installs `/fact-check` globally so it works from any repo on the Mac.
 
 ## Notes for Next Session
 
+- Mac dev server may need restart after sleep: `poetry run dev` from ClaimeAI directory.
+- langgraph-cli MUST stay pinned at 0.4.8 — do NOT upgrade. Latest (0.4.31) pulls langgraph-api 0.11.x which is incompatible with langgraph 0.4.x (ImportError on CONFIG_KEY_CACHE).
+- Multi-repo backup cloned to `~/Documents/GitHub/Robert-Repos/claude-multi-repo-instructions-and-lessons/` on this Mac.
 - Phase 06 future build = Serper SERP + crawl4ai two-stage (decision record in phase-plan-notes).
 - D59: Fable + goal-loop evaluation approach unchanged when Phase 06 resumes.
 - Claim 3 ground truth ambiguity: Feb 2025 UNGA had multiple resolutions; "98 votes" may be correct for A/RES/ES-11/9.
