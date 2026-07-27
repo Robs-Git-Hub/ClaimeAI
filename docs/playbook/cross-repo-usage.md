@@ -69,6 +69,7 @@ Optional flags:
 cd "C:\path\to\ClaimeAI"
 poetry run python scripts/run_heavy.py "C:\path\to\your-paper.md" \
     --vault "C:\path\to\your-vault" \
+    --research-dir "v-research" \
     --argument-pyramid "your-pyramid-name" \
     --corpus-ids "d_abc123,d_def456"
 ```
@@ -79,6 +80,7 @@ All flags:
 |------|----------|-------------|
 | `draft` (positional) | Yes | Path to the draft (`.md`, `.markdown`, `.txt`, `.pdf`) |
 | `--vault PATH` | No | Obsidian vault root. Omit to skip vault verification entirely. |
+| `--research-dir NAME` | No | Subdirectory under vault root containing `.md` notes (default: `v-research`). |
 | `--argument-pyramid NAME` | No | Filter vault notes by this `argument_pyramid` frontmatter value |
 | `--profile heavy\|light` | No | Default: `heavy`. Use `light` to run web-only through this entry point. |
 | `--no-web` | No | Disable web route (vault + corpus only) |

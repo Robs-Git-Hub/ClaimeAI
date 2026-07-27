@@ -79,12 +79,14 @@ Flags:
 ```
 poetry run python scripts/run_heavy.py <draft-path> \
     --vault <vault-path> \
+    --research-dir <dir-name> \
     --argument-pyramid <name> \
     --corpus-ids <d_id1,d_id2>
 ```
 
 Flags:
 - `--vault PATH` — Obsidian vault root (omit to skip vault verification)
+- `--research-dir NAME` — subdirectory under vault root containing notes (default: `v-research`)
 - `--argument-pyramid NAME` — filter vault notes by this frontmatter value
 - `--profile heavy|light` — default: heavy
 - `--no-web` — disable web route (vault + corpus only)
