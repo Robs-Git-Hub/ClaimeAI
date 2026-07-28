@@ -7,15 +7,15 @@ against fixture notes in ``tests/fixtures/vault/v-research/``. The single
 vault used for the Ukraine UNGA voting research project.
 
 Fixture set (6 notes, in tests/fixtures/vault/v-research/):
-    SOURCE-fixture-academic-paper.md   type: academic-paper (evidence)
+    SOURCE-fixture-academic-paper.md   type: journalArticle (evidence)
     QUOTE-fixture-verbatim-example.md  type: quotation (evidence, pyramid-tagged)
     CLAIM-fixture-example-claim.md     type: claim (evidence, pyramid-tagged, extra field)
     MOC-fixture-non-evidence.md        type: moc (non-evidence, for filter tests)
     BAD-missing-frontmatter.md         no frontmatter at all
     BAD-malformed-yaml.md              unterminated YAML list (parse failure)
 
-Real vault type values differ from the FILE PREFIX: SOURCE- notes use
-subtype values (academic-paper, dataset, policy-paper, web-page, ...), not
+Real vault type values differ from the FILE PREFIX: SOURCE- notes use the
+Zotero item type (journalArticle, dataset, report, webpage, ...), not
 literal "source"; QUOTE- notes use "quotation", not "quote". Confirmed by
 reading tests/fixtures/vault source notes and the property-enums.md registry
 at C:/Users/rj_co/OneDrive/Documents/GitHub/Robert-Repos/ukraine-vote-analysis/vault-main/_index/property-enums.md
@@ -57,7 +57,7 @@ class TestParseVaultNote:
         note = parse_vault_note(fixture_path("SOURCE-fixture-academic-paper.md"))
 
         assert note.name == "SOURCE-fixture-academic-paper"
-        assert note.note_type == "academic-paper"
+        assert note.note_type == "journalArticle"
         assert note.frontmatter["title"] == "Fixture — Example Academic Paper"
         assert note.frontmatter["source_url"] == "https://example.org/paper"
         assert note.frontmatter["access"] == "free"
@@ -146,7 +146,7 @@ class TestParseVaultNote:
     def test_parse_vault_note_aliases_single_string_normalized_to_list(self, tmp_path):
         note_path = tmp_path / "SOURCE-alias-string.md"
         note_path.write_text(
-            "---\ntype: web-page\naliases: Solo Alias 2026\n---\n\nBody text.\n",
+            "---\ntype: webpage\naliases: Solo Alias 2026\n---\n\nBody text.\n",
             encoding="utf-8",
         )
 
@@ -157,7 +157,7 @@ class TestParseVaultNote:
     def test_parse_vault_note_aliases_malformed_non_string_entries_degrade_empty(self, tmp_path):
         note_path = tmp_path / "SOURCE-alias-bad-list.md"
         note_path.write_text(
-            "---\ntype: web-page\naliases: [\"Good Alias\", 42]\n---\n\nBody text.\n",
+            "---\ntype: webpage\naliases: [\"Good Alias\", 42]\n---\n\nBody text.\n",
             encoding="utf-8",
         )
 
@@ -168,7 +168,7 @@ class TestParseVaultNote:
     def test_parse_vault_note_aliases_wrong_type_degrades_empty(self, tmp_path):
         note_path = tmp_path / "SOURCE-alias-wrong-type.md"
         note_path.write_text(
-            "---\ntype: web-page\naliases: 42\n---\n\nBody text.\n",
+            "---\ntype: webpage\naliases: 42\n---\n\nBody text.\n",
             encoding="utf-8",
         )
 
@@ -289,7 +289,7 @@ class TestSerializeVault:
 class TestBuildVaultIndex:
     def test_filename_keys_present(self):
         note = VaultNote(
-            name="SOURCE-a", note_type="web-page", file_path="v-research/SOURCE-a.md"
+            name="SOURCE-a", note_type="webpage", file_path="v-research/SOURCE-a.md"
         )
 
         index = build_vault_index([note])
@@ -299,7 +299,7 @@ class TestBuildVaultIndex:
     def test_alias_keys_present(self):
         note = VaultNote(
             name="SOURCE-de-carvalho-2025-x",
-            note_type="academic-paper",
+            note_type="journalArticle",
             aliases=["de Carvalho 2025"],
             file_path="v-research/SOURCE-de-carvalho-2025-x.md",
         )
@@ -312,12 +312,12 @@ class TestBuildVaultIndex:
     def test_alias_colliding_with_filename_is_dropped(self):
         aliased_note = VaultNote(
             name="SOURCE-a",
-            note_type="web-page",
+            note_type="webpage",
             aliases=["SOURCE-b"],
             file_path="v-research/SOURCE-a.md",
         )
         filename_note = VaultNote(
-            name="SOURCE-b", note_type="web-page", file_path="v-research/SOURCE-b.md"
+            name="SOURCE-b", note_type="webpage", file_path="v-research/SOURCE-b.md"
         )
 
         index = build_vault_index([aliased_note, filename_note])
@@ -329,13 +329,13 @@ class TestBuildVaultIndex:
     def test_two_notes_sharing_an_alias_are_both_dropped(self):
         note_a = VaultNote(
             name="SOURCE-a",
-            note_type="web-page",
+            note_type="webpage",
             aliases=["Shared Alias 2026"],
             file_path="v-research/SOURCE-a.md",
         )
         note_b = VaultNote(
             name="SOURCE-b",
-            note_type="web-page",
+            note_type="webpage",
             aliases=["Shared Alias 2026"],
             file_path="v-research/SOURCE-b.md",
         )
@@ -351,7 +351,7 @@ class TestBuildVaultIndex:
         # Exercises build_vault_index over in-memory notes only -- no vault
         # path or file access involved, confirming it's a pure function.
         note = VaultNote(
-            name="SOURCE-pure", note_type="web-page", file_path="v-research/SOURCE-pure.md"
+            name="SOURCE-pure", note_type="webpage", file_path="v-research/SOURCE-pure.md"
         )
 
         index = build_vault_index([note])
@@ -402,11 +402,10 @@ class TestLiveVault:
         for note in notes:
             type_counts[note.note_type] = type_counts.get(note.note_type, 0) + 1
 
-        # SOURCE- notes use subtype values, not a literal "source" type.
-        source_types = {
-            "web-page", "academic-paper", "policy-paper", "grant-programme",
-            "org-website", "scholar-profile", "book-note", "dataset",
-            "source-dataset", "data-source",
+        # SOURCE- notes use the Zotero item type, not a literal "source" type.
+        source_types = DEFAULT_EVIDENCE_TYPES - {
+            "quotation", "paraphrase", "observation", "claim",
+            "hypothesis", "interpretation", "experiment", "result",
         }
         source_count = sum(type_counts.get(t, 0) for t in source_types)
         quote_count = type_counts.get("quotation", 0)

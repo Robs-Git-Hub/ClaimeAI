@@ -1,6 +1,6 @@
 ---
 title: "Fixture — Example Academic Paper"
-type: academic-paper
+type: journalArticle
 tags: [fixture, ukraine, voting]
 strand: [ukraine-voting-patterns]
 date: 2026-06-01

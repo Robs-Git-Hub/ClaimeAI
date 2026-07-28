@@ -9,9 +9,8 @@ vault files.
 Vault schema notes (discovered from the real vault, not assumed):
     - Frontmatter uses a ``type`` field (not ``note_type``).
     - The note's FILE PREFIX does not always match its frontmatter ``type``:
-      SOURCE- notes use subtype values (academic-paper, dataset,
-      policy-paper, web-page, source-dataset, data-source, ...), and
-      QUOTE- notes use "quotation", not "quote".
+      SOURCE- notes use the Zotero item type (journalArticle, webpage,
+      report, dataset, ...), and QUOTE- notes use "quotation", not "quote".
     - ``argument_pyramid`` is a YAML list field, e.g. ``[pyramid-name]``.
     - Body sections are split on level-2 (``##``) markdown headings.
 
@@ -38,28 +37,19 @@ from pydantic import BaseModel, Field
 # prefix — see module docstring). Callers may pass a custom set instead;
 # load_vault() applies NO type filter when evidence_types is left as None.
 DEFAULT_EVIDENCE_TYPES: Set[str] = {
-    # SOURCE- subtype values (property-enums.md documents 8; the live vault
-    # also has "source-dataset" and "data-source" from schema drift).
-    "web-page",
-    "academic-paper",
-    "policy-paper",
-    "grant-programme",
-    "org-website",
-    "scholar-profile",
-    "book-note",
-    "dataset",
-    "source-dataset",
-    "data-source",
-    # Evidence-chain types (property-enums.md "Evidence Chain" list).
-    "quotation",
-    "paraphrase",
-    "observation",
-    "claim",
-    "thesis",
-    "hypothesis",
-    "interpretation",
-    "experiment",
-    "result",
+    # Zotero item types (replaces custom source subtypes)
+    "artwork", "audioRecording", "bill", "blogPost", "book",
+    "bookSection", "case", "computerProgram", "conferencePaper",
+    "dataset", "dictionaryEntry", "document", "email",
+    "encyclopediaArticle", "film", "forumPost", "hearing",
+    "instantMessage", "interview", "journalArticle", "letter",
+    "magazineArticle", "manuscript", "map", "newspaperArticle",
+    "patent", "podcast", "preprint", "presentation",
+    "radioBroadcast", "report", "standard", "statute", "thesis",
+    "tvBroadcast", "videoRecording", "webpage",
+    # Evidence-chain types (unchanged)
+    "quotation", "paraphrase", "observation", "claim",
+    "hypothesis", "interpretation", "experiment", "result",
 }
 
 _FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?\n)---\s*\n?", re.DOTALL)

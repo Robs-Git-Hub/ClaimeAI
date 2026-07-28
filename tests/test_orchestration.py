@@ -58,7 +58,7 @@ def make_validated_claim(claim_text, original_index):
     )
 
 
-def make_vault_note(name, note_type="web-page", body="Some content.", wikilinks=None):
+def make_vault_note(name, note_type="webpage", body="Some content.", wikilinks=None):
     return VaultNote(
         name=name,
         note_type=note_type,

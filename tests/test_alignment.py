@@ -87,7 +87,7 @@ def test_gather_source_with_quote_child():
     )
     source = make_vault_note(
         "SOURCE-a",
-        "web-page",
+        "webpage",
         body_sections={"": "About the source."},
         wikilinks=["QUOTE-a"],
     )
@@ -97,7 +97,7 @@ def test_gather_source_with_quote_child():
 
     assert result.cited_note_name is not None
     assert result.cited_note_name == "SOURCE-a"
-    assert result.cited_note_type == "web-page"
+    assert result.cited_note_type == "webpage"
     assert result.cited_note_content == "About the source."
     assert len(result.linked_notes) == 1
     assert result.linked_notes[0].name == "QUOTE-a"
@@ -125,7 +125,7 @@ def test_gather_result_note_with_linked_hyp():
 
 
 def test_gather_note_no_body_no_links():
-    empty_note = make_vault_note("SOURCE-empty", "web-page")
+    empty_note = make_vault_note("SOURCE-empty", "webpage")
     vault_by_name = {"SOURCE-empty": empty_note}
 
     result = gather_evidence("SOURCE-empty", vault_by_name)
@@ -136,7 +136,7 @@ def test_gather_note_no_body_no_links():
 
 def test_gather_note_with_body_no_links():
     note = make_vault_note(
-        "SOURCE-solo", "web-page", body_sections={"": "Solo content."}
+        "SOURCE-solo", "webpage", body_sections={"": "Solo content."}
     )
     vault_by_name = {"SOURCE-solo": note}
 
@@ -151,7 +151,7 @@ def test_gather_linked_note_not_in_vault_skipped():
     quote = make_vault_note("QUOTE-a", "quotation", body_sections={"": "Real quote."})
     source = make_vault_note(
         "SOURCE-a",
-        "web-page",
+        "webpage",
         body_sections={"": "Source content."},
         wikilinks=["QUOTE-a", "QUOTE-missing"],
     )
@@ -174,7 +174,7 @@ def test_gather_one_hop_only():
     )
     note_a = make_vault_note(
         "NOTE-a",
-        "web-page",
+        "webpage",
         body_sections={"": "A content."},
         wikilinks=["NOTE-b"],
     )
@@ -196,7 +196,7 @@ def test_gather_multiple_linked_notes():
     linked_3 = make_vault_note("LINK-3", "paraphrase", body_sections={"": "Three."})
     source = make_vault_note(
         "SOURCE-multi",
-        "web-page",
+        "webpage",
         body_sections={"": "Main."},
         wikilinks=["LINK-1", "LINK-2", "LINK-3"],
     )
@@ -221,7 +221,7 @@ def test_gather_evidence_resolves_via_alias_index():
     """
     note = make_vault_note(
         "SOURCE-de-carvalho-2025-x",
-        "academic-paper",
+        "journalArticle",
         body_sections={"": "Shifting alliances content."},
         aliases=["de Carvalho 2025"],
     )
@@ -274,7 +274,7 @@ async def test_evaluate_skips_empty_cite_set():
 @pytest.mark.asyncio
 async def test_evaluate_supported_verdict():
     source = make_vault_note(
-        "SOURCE-a", "web-page", body_sections={"": "Supporting content."}
+        "SOURCE-a", "webpage", body_sections={"": "Supporting content."}
     )
     vault_by_name = {"SOURCE-a": source}
     record = make_claim_record("The sky is blue.", cite_set=["SOURCE-a"])
@@ -304,7 +304,7 @@ async def test_evaluate_supported_verdict():
 @pytest.mark.asyncio
 async def test_evaluate_not_supported_verdict():
     source = make_vault_note(
-        "SOURCE-b", "web-page", body_sections={"": "Unrelated content."}
+        "SOURCE-b", "webpage", body_sections={"": "Unrelated content."}
     )
     vault_by_name = {"SOURCE-b": source}
     record = make_claim_record("A miscited claim.", cite_set=["SOURCE-b"])
@@ -332,7 +332,7 @@ async def test_evaluate_not_supported_verdict():
 @pytest.mark.asyncio
 async def test_evaluate_contradicted_verdict():
     source = make_vault_note(
-        "SOURCE-c", "web-page", body_sections={"": "Contradicting content."}
+        "SOURCE-c", "webpage", body_sections={"": "Contradicting content."}
     )
     vault_by_name = {"SOURCE-c": source}
     record = make_claim_record("A contradicted claim.", cite_set=["SOURCE-c"])
@@ -361,7 +361,7 @@ async def test_evaluate_contradicted_verdict():
 @pytest.mark.asyncio
 async def test_evaluate_skips_empty_claim_text():
     source = make_vault_note(
-        "SOURCE-a", "web-page", body_sections={"": "Content."}
+        "SOURCE-a", "webpage", body_sections={"": "Content."}
     )
     vault_by_name = {"SOURCE-a": source}
     verdict = Verdict(
@@ -409,7 +409,7 @@ async def test_evaluate_note_not_in_vault():
 
 @pytest.mark.asyncio
 async def test_evaluate_insufficient_content():
-    empty_note = make_vault_note("SOURCE-empty", "web-page")
+    empty_note = make_vault_note("SOURCE-empty", "webpage")
     vault_by_name = {"SOURCE-empty": empty_note}
     record = make_claim_record("A claim.", cite_set=["SOURCE-empty"])
 
@@ -428,10 +428,10 @@ async def test_evaluate_insufficient_content():
 @pytest.mark.asyncio
 async def test_evaluate_union_semantics():
     supported_note = make_vault_note(
-        "SOURCE-good", "web-page", body_sections={"": "Good content."}
+        "SOURCE-good", "webpage", body_sections={"": "Good content."}
     )
     unrelated_note = make_vault_note(
-        "SOURCE-bad", "web-page", body_sections={"": "Unrelated content."}
+        "SOURCE-bad", "webpage", body_sections={"": "Unrelated content."}
     )
     vault_by_name = {"SOURCE-good": supported_note, "SOURCE-bad": unrelated_note}
     record = make_claim_record(
@@ -462,7 +462,7 @@ async def test_evaluate_union_semantics():
 @pytest.mark.asyncio
 async def test_evaluate_llm_returns_none():
     source = make_vault_note(
-        "SOURCE-a", "web-page", body_sections={"": "Some content."}
+        "SOURCE-a", "webpage", body_sections={"": "Some content."}
     )
     vault_by_name = {"SOURCE-a": source}
     record = make_claim_record("A claim.", cite_set=["SOURCE-a"])
@@ -488,7 +488,7 @@ async def test_evaluate_no_web_verdict():
     with patch(
         "ingest.alignment.call_llm_with_structured_output", new_callable=AsyncMock
     ) as mock_llm_call:
-        result = await evaluate_alignment(record, {"SOURCE-a": make_vault_note("SOURCE-a", "web-page")})
+        result = await evaluate_alignment(record, {"SOURCE-a": make_vault_note("SOURCE-a", "webpage")})
 
     mock_llm_call.assert_not_called()
     assert result.route_verdicts == []
@@ -497,7 +497,7 @@ async def test_evaluate_no_web_verdict():
 @pytest.mark.asyncio
 async def test_evaluate_provenance_recorded():
     source = make_vault_note(
-        "SOURCE-prov", "web-page", body_sections={"": "Some content."}
+        "SOURCE-prov", "webpage", body_sections={"": "Some content."}
     )
     linked = make_vault_note(
         "QUOTE-prov", "quotation", body_sections={"": "A strong quote."}
@@ -527,7 +527,7 @@ async def test_evaluate_provenance_recorded():
 async def test_evaluate_falls_back_to_full_vault():
     """A note missing from the filtered vault is found in the full vault."""
     source = make_vault_note(
-        "SOURCE-untagged", "academic-paper", body_sections={"": "Untagged content."}
+        "SOURCE-untagged", "journalArticle", body_sections={"": "Untagged content."}
     )
     record = make_claim_record("A claim.", cite_set=["SOURCE-untagged"])
 

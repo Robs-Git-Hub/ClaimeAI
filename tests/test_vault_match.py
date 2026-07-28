@@ -107,7 +107,7 @@ async def test_batch_match_returns_proposals():
         make_claim_record("Claim one."),
         make_claim_record("Claim two."),
     ]
-    vault = make_serialized_vault([make_vault_note("SOURCE-a", "web-page")])
+    vault = make_serialized_vault([make_vault_note("SOURCE-a", "webpage")])
 
     mock_response = BatchMatchOutput(
         matches=[
@@ -134,7 +134,7 @@ async def test_batch_match_skips_cited_claims():
         make_claim_record("Cited claim.", citation_status=CitationStatus.CITED),
         make_claim_record("Citation-free claim.", citation_status=CitationStatus.CITATION_FREE),
     ]
-    vault = make_serialized_vault([make_vault_note("SOURCE-a", "web-page")])
+    vault = make_serialized_vault([make_vault_note("SOURCE-a", "webpage")])
 
     mock_response = BatchMatchOutput(matches=[])
 
@@ -169,7 +169,7 @@ async def test_batch_match_empty_claims():
 @pytest.mark.asyncio
 async def test_batch_match_llm_returns_none():
     records = [make_claim_record("Claim.")]
-    vault = make_serialized_vault([make_vault_note("SOURCE-a", "web-page")])
+    vault = make_serialized_vault([make_vault_note("SOURCE-a", "webpage")])
 
     with patch(
         "ingest.vault_match.call_llm_with_structured_output",
@@ -190,7 +190,7 @@ async def test_batch_match_skips_no_web_verdict():
             position=DraftPosition(sentence_index=0),
         )
     ]
-    vault = make_serialized_vault([make_vault_note("SOURCE-a", "web-page")])
+    vault = make_serialized_vault([make_vault_note("SOURCE-a", "webpage")])
 
     with patch(
         "ingest.vault_match.call_llm_with_structured_output", new_callable=AsyncMock
@@ -208,7 +208,7 @@ async def test_batch_match_skips_no_web_verdict():
 
 @pytest.mark.asyncio
 async def test_verify_supported_match():
-    note = make_vault_note("SOURCE-a", "web-page", body_sections={"": "Supporting content."})
+    note = make_vault_note("SOURCE-a", "webpage", body_sections={"": "Supporting content."})
     vault_by_name = {"SOURCE-a": note}
     records = [make_claim_record("Claim one.")]
     proposals = [MatchProposal(claim_index=0, note_name="SOURCE-a", reasoning="Relevant.")]
@@ -237,7 +237,7 @@ async def test_verify_supported_match():
 
 @pytest.mark.asyncio
 async def test_verify_no_vault_match():
-    note = make_vault_note("SOURCE-a", "web-page", body_sections={"": "Unrelated content."})
+    note = make_vault_note("SOURCE-a", "webpage", body_sections={"": "Unrelated content."})
     vault_by_name = {"SOURCE-a": note}
     records = [make_claim_record("Claim one.")]
     proposals = [MatchProposal(claim_index=0, note_name="SOURCE-a", reasoning="Maybe relevant.")]
@@ -262,7 +262,7 @@ async def test_verify_no_vault_match():
 
 @pytest.mark.asyncio
 async def test_verify_contradicted_match():
-    note = make_vault_note("SOURCE-a", "web-page", body_sections={"": "Contradicting content."})
+    note = make_vault_note("SOURCE-a", "webpage", body_sections={"": "Contradicting content."})
     vault_by_name = {"SOURCE-a": note}
     records = [make_claim_record("Claim one.")]
     proposals = [MatchProposal(claim_index=0, note_name="SOURCE-a", reasoning="Maybe relevant.")]
@@ -287,7 +287,7 @@ async def test_verify_contradicted_match():
 
 @pytest.mark.asyncio
 async def test_verify_out_of_range_index_skipped():
-    note = make_vault_note("SOURCE-a", "web-page", body_sections={"": "Content."})
+    note = make_vault_note("SOURCE-a", "webpage", body_sections={"": "Content."})
     vault_by_name = {"SOURCE-a": note}
     records = [make_claim_record("Claim one."), make_claim_record("Claim two.")]
     proposals = [MatchProposal(claim_index=99, note_name="SOURCE-a", reasoning="Out of range.")]
@@ -319,7 +319,7 @@ async def test_verify_note_not_in_vault_skipped():
 
 @pytest.mark.asyncio
 async def test_verify_llm_returns_none_skipped():
-    note = make_vault_note("SOURCE-a", "web-page", body_sections={"": "Content."})
+    note = make_vault_note("SOURCE-a", "webpage", body_sections={"": "Content."})
     vault_by_name = {"SOURCE-a": note}
     records = [make_claim_record("Claim one.")]
     proposals = [MatchProposal(claim_index=0, note_name="SOURCE-a", reasoning="Relevant.")]
@@ -365,9 +365,9 @@ async def test_verify_copies_claim_strength_from_claim_note():
 async def test_verify_no_copy_if_not_claim_type():
     note = make_vault_note(
         "SOURCE-a",
-        "web-page",
+        "webpage",
         body_sections={"": "Source content."},
-        frontmatter={"type": "web-page", "claim_strength": 5, "evidence_quality": 5},
+        frontmatter={"type": "webpage", "claim_strength": 5, "evidence_quality": 5},
     )
     vault_by_name = {"SOURCE-a": note}
     records = [make_claim_record("Claim one.")]
@@ -424,7 +424,7 @@ async def test_verify_no_copy_if_not_supported():
 
 @pytest.mark.asyncio
 async def test_verify_matches_default_provenance_type_is_vault_note():
-    note = make_vault_note("SOURCE-a", "web-page", body_sections={"": "Supporting content."})
+    note = make_vault_note("SOURCE-a", "webpage", body_sections={"": "Supporting content."})
     vault_by_name = {"SOURCE-a": note}
     records = [make_claim_record("Claim one.")]
     proposals = [MatchProposal(claim_index=0, note_name="SOURCE-a", reasoning="Relevant.")]
@@ -444,7 +444,7 @@ async def test_verify_matches_default_provenance_type_is_vault_note():
 
 @pytest.mark.asyncio
 async def test_verify_matches_accepts_fallback_provenance_type():
-    note = make_vault_note("SOURCE-a", "web-page", body_sections={"": "Supporting content."})
+    note = make_vault_note("SOURCE-a", "webpage", body_sections={"": "Supporting content."})
     vault_by_name = {"SOURCE-a": note}
     records = [make_claim_record("Claim one.")]
     proposals = [MatchProposal(claim_index=0, note_name="SOURCE-a", reasoning="Relevant.")]
@@ -475,7 +475,7 @@ async def test_batch_match_excludes_given_indices():
         make_claim_record("Already matched claim."),
         make_claim_record("Still unmatched claim."),
     ]
-    vault = make_serialized_vault([make_vault_note("SOURCE-a", "web-page")])
+    vault = make_serialized_vault([make_vault_note("SOURCE-a", "webpage")])
 
     mock_response = BatchMatchOutput(matches=[])
 
@@ -495,7 +495,7 @@ async def test_batch_match_excludes_given_indices():
 @pytest.mark.asyncio
 async def test_batch_match_exclude_indices_none_matches_default_behavior():
     records = [make_claim_record("Claim one.")]
-    vault = make_serialized_vault([make_vault_note("SOURCE-a", "web-page")])
+    vault = make_serialized_vault([make_vault_note("SOURCE-a", "webpage")])
     mock_response = BatchMatchOutput(
         matches=[MatchProposal(claim_index=0, note_name="SOURCE-a", reasoning="Relevant.")]
     )
@@ -512,7 +512,7 @@ async def test_batch_match_exclude_indices_none_matches_default_behavior():
 @pytest.mark.asyncio
 async def test_batch_match_all_excluded_skips_llm_call():
     records = [make_claim_record("Claim one.")]
-    vault = make_serialized_vault([make_vault_note("SOURCE-a", "web-page")])
+    vault = make_serialized_vault([make_vault_note("SOURCE-a", "webpage")])
 
     with patch(
         "ingest.vault_match.call_llm_with_structured_output", new_callable=AsyncMock
@@ -584,7 +584,7 @@ async def test_fallback_sends_all_unmatched_claims_in_one_call():
         make_claim_record("Still unmatched one."),
         make_claim_record("Still unmatched two."),
     ]
-    full_notes = [make_vault_note("SOURCE-untagged", "web-page", body_sections={"": "Content."})]
+    full_notes = [make_vault_note("SOURCE-untagged", "webpage", body_sections={"": "Content."})]
 
     mock_response = BatchMatchOutput(
         matches=[
@@ -613,7 +613,7 @@ async def test_fallback_sends_all_unmatched_claims_in_one_call():
 @pytest.mark.asyncio
 async def test_fallback_logs_corpus_size(caplog):
     records = [make_claim_record("Claim one.")]
-    full_notes = [make_vault_note("SOURCE-a", "web-page", body_sections={"": "Content."})]
+    full_notes = [make_vault_note("SOURCE-a", "webpage", body_sections={"": "Content."})]
     mock_response = BatchMatchOutput(matches=[])
 
     with patch(
@@ -628,7 +628,7 @@ async def test_fallback_logs_corpus_size(caplog):
 @pytest.mark.asyncio
 async def test_fallback_logs_warning_when_over_token_budget(caplog):
     records = [make_claim_record("Claim one.")]
-    full_notes = [make_vault_note("SOURCE-a", "web-page", body_sections={"": "Content." * 100})]
+    full_notes = [make_vault_note("SOURCE-a", "webpage", body_sections={"": "Content." * 100})]
     mock_response = BatchMatchOutput(matches=[])
 
     with patch(
@@ -747,7 +747,7 @@ async def test_fallback_uses_high_tier():
     a different number ("98 votes" claim vs. a "93 votes" note). The
     fallback is one call per run, so it's promoted to "high"."""
     records = [make_claim_record("Claim one.")]
-    full_notes = [make_vault_note("SOURCE-a", "web-page", body_sections={"": "Content."})]
+    full_notes = [make_vault_note("SOURCE-a", "webpage", body_sections={"": "Content."})]
     mock_response = BatchMatchOutput(matches=[])
 
     with patch(
@@ -764,7 +764,7 @@ async def test_batch_match_claims_default_tier_is_mid():
     """Pass 1 (paper-scoped, filtered corpus) must stay on the cheap tier --
     only the fallback pass is promoted."""
     records = [make_claim_record("Claim one.")]
-    vault = make_serialized_vault([make_vault_note("SOURCE-a", "web-page")])
+    vault = make_serialized_vault([make_vault_note("SOURCE-a", "webpage")])
     mock_response = BatchMatchOutput(matches=[])
 
     with patch(
@@ -784,9 +784,9 @@ async def test_fallback_surfaces_priority_candidates_in_prompt():
     records = [make_claim_record("The resolution passed with 98 votes.")]
     full_notes = [
         make_vault_note(
-            "SOURCE-vote-count", "web-page", body_sections={"": "The tally was 98 in favor."}
+            "SOURCE-vote-count", "webpage", body_sections={"": "The tally was 98 in favor."}
         ),
-        make_vault_note("SOURCE-unrelated", "web-page", body_sections={"": "Nothing relevant."}),
+        make_vault_note("SOURCE-unrelated", "webpage", body_sections={"": "Nothing relevant."}),
     ]
     mock_response = BatchMatchOutput(matches=[])
 
